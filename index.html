@@ -1656,9 +1656,9 @@ footer.actions-footer .btn{flex:0 1 auto;}
   // cambio queda guardado únicamente en la PC donde se hizo.
   const DEFAULT_CLOUD_CONFIG = {
     enabled: true,
-    apiKey: 'AIzaSyBcKYNOCSrt7A_bakQ9B5ke3JJ4OetCQsM',
-    databaseURL: 'https://facturas-ress-default-rtdb.firebaseio.com',
-    projectId: 'facturas-ress'
+    apiKey: 'AIzaSyBLRFI_aWLDVNbQeIaU08cbVjjKLsqfDf4',
+    databaseURL: 'https://facturas-ress-testing-default-rtdb.firebaseio.com',
+    projectId: 'facturas-ress-testing'
   };
 
   const appSettings = {
@@ -2164,10 +2164,23 @@ footer.actions-footer .btn{flex:0 1 auto;}
         const data = snap.val();
         if (!data) return; // esta sucursal todavía no tiene nada en la nube
 
+        // OJO: Firebase Realtime Database NO guarda arrays vacíos — si se
+        // escribe "invoices: []" (como hace "Eliminar datos de la nube"),
+        // el campo "invoices" directamente desaparece del nodo en vez de
+        // llegar como un array vacío. Por eso, si el nodo existe (data no es
+        // null, ya lo comprobamos arriba) pero la clave "invoices" no está
+        // presente, lo interpretamos como "cero facturas" y NO como "sin
+        // información" — si no, el borrado nunca se reflejaba en las demás
+        // PC conectadas (se quedaban con la tabla vieja para siempre).
+        const invoicesKeyPresent = Object.prototype.hasOwnProperty.call(data, 'invoices');
+        const incomingInvoicesArr = Array.isArray(data.invoices)
+          ? data.invoices
+          : (invoicesKeyPresent ? null : []); // ausente = vaciado por poda de Firebase → []
+
         // Si esto es exactamente lo que ESTA PC acaba de enviar, es solo el
         // "eco" de la nube confirmando el envío — se ignora, para no pisar
         // lo que el usuario ya siga escribiendo o marcando en pantalla.
-        const incomingInvoicesJSON = Array.isArray(data.invoices) ? JSON.stringify(data.invoices) : null;
+        const incomingInvoicesJSON = incomingInvoicesArr ? JSON.stringify(incomingInvoicesArr) : null;
         const isOwnInvoicesEcho = incomingInvoicesJSON !== null && incomingInvoicesJSON === lastPushedInvoicesJSON;
         const incomingResumenJSON = data.resumen ? JSON.stringify({
           tarjetas: data.resumen.tarjetas, coral: data.resumen.coral, responsable: data.resumen.responsable
@@ -2177,8 +2190,8 @@ footer.actions-footer .btn{flex:0 1 auto;}
         suppressCloudEcho = true;
         let changedSomething = false;
 
-        if (Array.isArray(data.invoices) && !isOwnInvoicesEcho){
-          state.invoices = ensureInsSeq(data.invoices.slice());
+        if (incomingInvoicesArr && !isOwnInvoicesEcho){
+          state.invoices = ensureInsSeq(incomingInvoicesArr.slice());
           changedSomething = true;
         }
         if (data.resumen && !isOwnResumenEcho){
