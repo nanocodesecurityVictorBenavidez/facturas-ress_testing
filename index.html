@@ -4538,7 +4538,14 @@ footer.actions-footer .btn{flex:0 1 auto;}
   function restoreSummaryFields(data){
     if (typeof data.tarjetas !== 'undefined') document.getElementById('inputTarjetas').value = data.tarjetas;
     if (typeof data.coral !== 'undefined') document.getElementById('inputCoral').value = data.coral;
-    if (typeof data.responsable !== 'undefined') document.getElementById('inputResponsable').value = data.responsable;
+    if (typeof data.responsable !== 'undefined'){
+      // Si lo que había guardado es un nombre real, se respeta. Si estaba
+      // vacío (por ejemplo, quedó así por error, o nunca se llenó), se usa
+      // el responsable por defecto en vez de dejar el campo en blanco —
+      // así queda relleno tanto la primera vez que se abre la app como
+      // cuando ya hay una sucursal seleccionada de antes.
+      document.getElementById('inputResponsable').value = data.responsable || appSettings.responsableDefault || '';
+    }
   }
 
   // Deja la tabla y el resumen completamente en blanco (usado al cambiar a
