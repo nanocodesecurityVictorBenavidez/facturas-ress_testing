@@ -592,6 +592,8 @@ footer.actions-footer{
 footer.actions-footer .btn{flex:0 1 auto;}
 #btnDownloadExcel{background:var(--color-primary); font-size:1rem;}
 #btnDownloadExcel:hover{background:var(--color-primary-dark);}
+#btnSaveLocal, #btnLoadLocal{background:var(--color-primary); color:#fff; border-color:var(--color-primary);}
+#btnSaveLocal:hover, #btnLoadLocal:hover{background:var(--color-primary-dark); border-color:var(--color-primary-dark);}
 
 /* ---------- Toasts ---------- */
 #toastContainer{position:fixed; bottom:6.5rem; right:1rem; display:flex; flex-direction:column; gap:.5rem; z-index:50; max-width:92vw;}
@@ -5480,8 +5482,12 @@ document.addEventListener('DOMContentLoaded', function(){
     XLSX.utils.book_append_sheet(wb, ws, 'Facturas');
     XLSX.utils.book_append_sheet(wb, ws2, 'Resumen');
 
-    const sucursalTag = getSucursal(currentSucursalId).id;
-    const filename = 'Facturas_Cierre_' + sucursalTag + '_' + todayStr() + '.xlsx';
+    const sucursalLabel = getSucursal(currentSucursalId).label;
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = now.getFullYear();
+    const filename = 'Formato de cierre ' + sucursalLabel + ' - ' + dd + '-' + mm + '-' + yyyy + '.xlsx';
     XLSX.writeFile(wb, filename);
     toast('Archivo Excel generado: ' + filename, 'ok');
   });
