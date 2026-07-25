@@ -1188,12 +1188,8 @@ footer.actions-footer .btn{flex:0 1 auto;}
     <div class="settings-section">
       <h3>Guardado</h3>
       <label class="settings-toggle">
-        <input type="checkbox" id="settingsAutoSave">
-        <span>Guardar automáticamente en este navegador cada vez que se agreguen facturas a la tabla (manual o desde texto/OCR procesado)</span>
-      </label>
-      <label class="settings-toggle" style="margin-top:.6rem;">
         <input type="checkbox" id="settingsLocalSave">
-        <span>Guardar una copia de respaldo en este navegador (localStorage). Si la desactiva y la sincronización en la nube también está apagada, <strong>nada quedará guardado</strong> al cerrar o recargar la página.</span>
+        <span>Respaldo local en este navegador. Si lo desactiva y la nube también está apagada, no se guarda nada.</span>
       </label>
     </div>
 
@@ -1238,7 +1234,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
       <div class="sucursal-field">
         <label for="settingsResponsable">Responsable de turno por defecto</label>
         <input type="text" id="settingsResponsable" placeholder="Ej. Invitado">
-        <p class="muted settings-hint">Se usa igual para las 3 sucursales. Se rellenará solo en el campo "Responsable de turno" cuando esté vacío (por ejemplo, después de "Eliminar datos de la nube" o "Limpiar todo").</p>
+        <p class="muted settings-hint">Se usa igual para las 3 sucursales. Se rellenará solo en el campo "Responsable de turno" cuando esté vacío (por ejemplo, después de "Eliminar Datos" o "Limpiar").</p>
       </div>
     </div>
 
@@ -1349,10 +1345,10 @@ footer.actions-footer .btn{flex:0 1 auto;}
 </div>
 
 <footer class="actions-footer">
-  <button type="button" class="btn btn-secondary" id="btnSaveLocal" aria-label="Guardar en la nube ahora">☁️ Guardar en la nube ahora</button>
-  <button type="button" class="btn btn-secondary" id="btnLoadLocal" aria-label="Recuperar de la nube">☁️ Recuperar de la nube</button>
-  <button type="button" class="btn btn-danger-outline" id="btnDeleteSavedData" aria-label="Eliminar permanentemente los datos de la nube de esta sucursal">🗑 Eliminar datos de la nube</button>
-  <button type="button" class="btn btn-danger-outline" id="btnClearAll" aria-label="Limpiar la pantalla (no borra lo ya guardado)">🧹 Limpiar todo</button>
+  <button type="button" class="btn btn-secondary" id="btnSaveLocal" aria-label="Guardar en la nube ahora">☁️ Guardar</button>
+  <button type="button" class="btn btn-secondary" id="btnLoadLocal" aria-label="Recuperar de la nube">☁️ Recuperar</button>
+  <button type="button" class="btn btn-danger-outline" id="btnDeleteSavedData" aria-label="Eliminar permanentemente los datos de la nube de esta sucursal">🗑 Eliminar Datos</button>
+  <button type="button" class="btn btn-danger-outline" id="btnClearAll" aria-label="Limpiar la pantalla (no borra lo ya guardado)">🧹 Limpiar</button>
   <button type="button" class="btn btn-ghost" id="btnPrintSummary" aria-label="Imprimir resumen">🖨 Imprimir resumen</button>
   <button type="button" class="btn btn-primary" id="btnDownloadExcel" aria-label="Descargar reporte en Excel">⬇ Descargar Excel</button>
 </footer>
@@ -1643,7 +1639,6 @@ footer.actions-footer .btn{flex:0 1 auto;}
      navegador (localStorage).
      ------------------------------------------------------------------ */
   const PAGESIZE_KEY = 'facturas_ress_pagesize_v1';
-  const AUTOSAVE_KEY = 'facturas_ress_autosave_v1';
   const LOCALSAVE_KEY = 'facturas_ress_localsave_enabled_v1';
   const THEME_KEY = 'facturas_ress_theme_v1';
   const CLOUD_CONFIG_KEY = 'facturas_ress_cloud_config_v1';
@@ -1664,7 +1659,6 @@ footer.actions-footer .btn{flex:0 1 auto;}
 
   const appSettings = {
     responsableDefault: '',
-    autoSave: false,
     localSaveEnabled: true, // respaldo en localStorage de este navegador; activado por defecto
     theme: 'light', // 'light' | 'dark' | 'system'
     cloud: { ...DEFAULT_CLOUD_CONFIG }
@@ -2418,7 +2412,6 @@ footer.actions-footer .btn{flex:0 1 auto;}
     } catch (e){ /* silencioso */ }
 
     try {
-      appSettings.autoSave = localStorage.getItem(AUTOSAVE_KEY) === '1';
     } catch (e){ /* silencioso */ }
 
     try {
@@ -2451,20 +2444,10 @@ footer.actions-footer .btn{flex:0 1 auto;}
     if (appSettings.cloud.enabled){ connectFirebase(); }
   })();
 
-  // Guarda automáticamente en localStorage (si el ajuste está activado y
-  // hay al menos una factura en la tabla). Se llama tras analizar
-  // imágenes, procesar texto y agregar una factura manual.
-  function autoSaveIfEnabled(){
-    if (appSettings.autoSave && state.invoices.length){
-      persistInvoicesToStorage('Guardado automático ✓');
-    }
-  }
-
   // Refleja en el formulario del modal los valores actuales de cada ajuste.
   function populateSettingsForm(){
     document.getElementById('settingsTheme').value = appSettings.theme || 'light';
     document.getElementById('settingsPageSize').value = String(state.pageSize || DEFAULT_PAGESIZE);
-    document.getElementById('settingsAutoSave').checked = !!appSettings.autoSave;
     document.getElementById('settingsLocalSave').checked = !!appSettings.localSaveEnabled;
     const sessionLabel = document.getElementById('sessionSucursalLabel');
     if (sessionLabel){
@@ -2490,11 +2473,6 @@ footer.actions-footer .btn{flex:0 1 auto;}
       recalcAll();
     }
 
-    // Guardado automático
-    const autoSave = document.getElementById('settingsAutoSave').checked;
-    appSettings.autoSave = autoSave;
-    try { localStorage.setItem(AUTOSAVE_KEY, autoSave ? '1' : '0'); } catch (e){ /* silencioso */ }
-
     // Respaldo en este navegador (localStorage)
     const localSaveEnabled = document.getElementById('settingsLocalSave').checked;
     appSettings.localSaveEnabled = localSaveEnabled;
@@ -2514,12 +2492,11 @@ footer.actions-footer .btn{flex:0 1 auto;}
   });
 
   document.getElementById('btnResetSettings').addEventListener('click', async () => {
-    const ok = await showConfirmDialog('¿Restaurar el tema, filas por página y guardado automático a sus valores originales? La sucursal, el responsable por defecto, la sincronización en la nube, las facturas de la tabla y los datos guardados no se ven afectados.');
+    const ok = await showConfirmDialog('¿Restaurar el tema y filas por página a sus valores originales? La sucursal, el responsable por defecto, la sincronización en la nube, las facturas de la tabla y los datos guardados no se ven afectados.');
     if (!ok) return;
 
     try {
       localStorage.removeItem(PAGESIZE_KEY);
-      localStorage.removeItem(AUTOSAVE_KEY);
       localStorage.removeItem(THEME_KEY);
       localStorage.removeItem(LOCALSAVE_KEY);
     } catch (e){ /* silencioso */ }
@@ -2528,7 +2505,6 @@ footer.actions-footer .btn{flex:0 1 auto;}
     applyTheme('light');
     state.pageSize = DEFAULT_PAGESIZE;
     state.currentPage = 1;
-    appSettings.autoSave = false;
     appSettings.localSaveEnabled = true;
     recalcAll();
     populateSettingsForm();
@@ -3714,7 +3690,6 @@ footer.actions-footer .btn{flex:0 1 auto;}
     };
     state.invoices.push(inv);
     recalcAll();
-    autoSaveIfEnabled();
     toast('Factura manual agregada. Complete los datos en la tabla.', 'ok');
   });
 
@@ -3930,7 +3905,6 @@ footer.actions-footer .btn{flex:0 1 auto;}
     pendingTextResults = [];
     document.getElementById('textParsePreview').textContent = '';
     recalcAll();
-    autoSaveIfEnabled();
   });
 
   document.getElementById('btnClearText').addEventListener('click', () => {
@@ -4682,10 +4656,8 @@ footer.actions-footer .btn{flex:0 1 auto;}
     } catch (err){ /* silencioso */ }
   })();
 
-  document.getElementById('btnClearAll').addEventListener('click', async () => {
-    const ok = await showConfirmDialog('¿Limpiar la pantalla? Se ocultarán las facturas, imágenes y texto ingresado de esta vista, pero el respaldo ya guardado (en este navegador y en la nube) NO se borra — si recarga la página, sus datos guardados vuelven a aparecer. Para borrarlos de forma permanente use "Eliminar datos de la nube".');
-    if (!ok) return;
-    // "Limpiar todo" es solo una limpieza VISUAL de esta pantalla — no
+  document.getElementById('btnClearAll').addEventListener('click', () => {
+    // "Limpiar" es solo una limpieza VISUAL de esta pantalla — no
     // borra nada guardado. Por eso se marcan skipNextCloudPush y
     // skipNextLocalSync antes de recalcAll(): así el recalculo que sigue
     // no dispara el guardado automático (ni a la nube ni a localStorage)
