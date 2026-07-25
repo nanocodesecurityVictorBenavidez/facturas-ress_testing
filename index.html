@@ -2081,7 +2081,21 @@ footer.actions-footer .btn{flex:0 1 auto;}
         } else {
           toast('✅ El administrador reactivó esta PC.', 'ok');
           if (blockedOverlay) blockedOverlay.hidden = true;
-          renderSummary(); // reenvía los totales actuales apenas se reactiva
+          if (currentSucursalId && !data.sucursalId){
+            // Mientras estaba bloqueada, el administrador la desconectó de
+            // su sucursal (quedó libre para otra PC) — hay que pedirle que
+            // elija de nuevo, en vez de seguir usando una sucursal que ya
+            // no tiene reservada.
+            try { localStorage.removeItem(SUCURSAL_KEY); } catch (e){ /* silencioso */ }
+            currentSucursalId = null;
+            updateAdminAccessLocal();
+            clearSucursalBadge();
+            clearWorkingDataOnScreen();
+            recalcAll();
+            openSucursalModal(true);
+          } else {
+            renderSummary(); // reenvía los totales actuales apenas se reactiva
+          }
         }
       }
 
@@ -2702,10 +2716,10 @@ footer.actions-footer .btn{flex:0 1 auto;}
         '<span class="device-status-pill ' + statusClass + '">' + statusLabel + '</span>' +
       '</div>' +
       '<div class="device-card-meta">Última vez activo: ' + lastSeenLabel + '</div>' +
-      (isCeibos
+      '<div class="device-admin-slot">' + (isCeibos
         ? '<p class="device-admin-note">🛠️ Panel de administrador: siempre permitido (es Ceibos).</p>'
         : '<label class="device-admin-checkbox"><input type="checkbox" class="device-admin-access-cb"' + (hasAccess ? ' checked' : '') + '> 🛠️ Permitir panel de administrador (Ctrl+,) en esta PC</label>'
-      ) +
+      ) + '</div>' +
       '<div class="device-card-controls">' +
         '<button type="button" class="btn ' + (isBlocked ? 'btn-secondary' : 'btn-danger-outline') + ' btn-sm device-btn-toggle-block">' +
           (isBlocked ? '✅ Desbloquear' : '🚫 Bloquear') +
@@ -2753,8 +2767,24 @@ footer.actions-footer .btn{flex:0 1 auto;}
     const subtitle = card.querySelector('.device-card-subtitle');
     if (subtitle) subtitle.textContent = deviceLabel;
 
-    const adminCb = card.querySelector('.device-admin-access-cb');
-    if (adminCb) adminCb.checked = !!data.adminAccess;
+    const adminSlot = card.querySelector('.device-admin-slot');
+    if (adminSlot){
+      const isCeibos = data.sucursalId === ADMIN_SUCURSAL_ID;
+      const hasAccess = !!data.adminAccess;
+      // Si cambió si esta PC "es Ceibos" o no (por ejemplo, estaba sin
+      // sucursal cuando se dibujó por primera vez y después se le asignó
+      // Ceibos), reemplaza toda la sección — nota fija vs. casilla — en
+      // vez de dejar la versión vieja pegada para siempre.
+      const alreadyShowsNote = !!adminSlot.querySelector('.device-admin-note');
+      if (isCeibos !== alreadyShowsNote){
+        adminSlot.innerHTML = isCeibos
+          ? '<p class="device-admin-note">🛠️ Panel de administrador: siempre permitido (es Ceibos).</p>'
+          : '<label class="device-admin-checkbox"><input type="checkbox" class="device-admin-access-cb"' + (hasAccess ? ' checked' : '') + '> 🛠️ Permitir panel de administrador (Ctrl+,) en esta PC</label>';
+      } else {
+        const cb = adminSlot.querySelector('.device-admin-access-cb');
+        if (cb) cb.checked = hasAccess;
+      }
+    }
 
     const nameTitle = card.querySelector('.device-card-name');
     if (nameTitle){
@@ -2915,6 +2945,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
           // actualización en vivo.
           card.classList.remove('is-blocked', 'is-online', 'is-offline');
           card.classList.add(currentlyBlocked ? 'is-online' : 'is-blocked');
+          card.setAttribute('data-blocked', currentlyBlocked ? '0' : '1');
           const pill = card.querySelector('.device-status-pill');
           if (pill){
             pill.classList.remove('online', 'offline', 'blocked');
@@ -2927,26 +2958,46 @@ footer.actions-footer .btn{flex:0 1 auto;}
             btn.classList.toggle('btn-danger-outline', currentlyBlocked);
             btn.classList.toggle('btn-secondary', !currentlyBlocked);
           }
+          applyDevicesFilter();
         })
         .catch(() => toast('No se pudo aplicar el cambio. Revise la conexión.', 'err'));
     }
 
     if (e.target.classList.contains('device-btn-delete')){
       const isSelf = targetDeviceId === deviceId;
+      const isBlocked = card.classList.contains('is-blocked');
       const confirmMsg = isSelf
         ? '¿Salir de la sucursal en ESTA misma PC? Se guardan los datos antes de salir y se le va a pedir elegir sucursal de nuevo, como cerrar sesión.'
-        : '¿Cerrar la sesión de esa PC y desconectarla de su sucursal? Si esa PC está conectada ahora mismo, se le cierra al instante y le vuelve a pedir elegir sucursal. Si está apagada o cerrada, esto no tiene efecto hasta que la vuelvan a abrir. No borra sus facturas guardadas.';
+        : (isBlocked
+            ? '¿Desconectar esa PC de su sucursal? Sigue BLOQUEADA — no va a poder volver a entrar hasta que la desbloquee. Solo se libera la sucursal para que otra PC pueda usarla. No borra sus facturas guardadas.'
+            : '¿Cerrar la sesión de esa PC y desconectarla de su sucursal? Si esa PC está conectada ahora mismo, se le cierra al instante y le vuelve a pedir elegir sucursal. Si está apagada o cerrada, esto no tiene efecto hasta que la vuelvan a abrir. No borra sus facturas guardadas.');
       const ok = await showConfirmDialog(confirmMsg);
       if (!ok) return;
-      fbDb.ref('dispositivos/' + targetDeviceId).remove()
+      // Si está bloqueada, NO se borra el registro entero (eso perdería
+      // el "blocked: true" y la dejaría entrar de nuevo sin querer). Se
+      // limpia solo la sucursal/presencia, manteniendo el bloqueo.
+      const removalAction = isBlocked
+        ? fbDb.ref('dispositivos/' + targetDeviceId).update({
+            sucursalId: null, sucursalLabel: null, online: false,
+            lastSeen: firebase.database.ServerValue.TIMESTAMP
+          })
+        : fbDb.ref('dispositivos/' + targetDeviceId).remove();
+      removalAction
         .then(() => {
-          toast(isSelf ? 'Sesión cerrada' : 'Se envió la desconexión a esa PC', 'ok');
-          // Quita la tarjeta de la pantalla al instante, sin esperar a que
-          // llegue la actualización en vivo.
-          card.remove();
-          const container = document.getElementById('devicesList');
-          if (container && !container.querySelector('.device-card')){
-            container.innerHTML = '<p class="devices-empty">Todavía no se ha registrado ninguna PC.</p>';
+          toast(isSelf ? 'Sesión cerrada' : (isBlocked ? 'PC desconectada de su sucursal (sigue bloqueada)' : 'Se envió la desconexión a esa PC'), 'ok');
+          if (isBlocked){
+            // Sigue bloqueada: se actualiza en el momento, sin esperar el
+            // vaivén de la nube, para que no parezca "en línea" con sucursal.
+            updateDeviceCardInPlace(card, targetDeviceId, { blocked: true, online: false, lastSeen: Date.now() }, Date.now());
+            applyDevicesFilter();
+          } else {
+            // Quita la tarjeta de la pantalla al instante, sin esperar a que
+            // llegue la actualización en vivo.
+            card.remove();
+            const container = document.getElementById('devicesList');
+            if (container && !container.querySelector('.device-card')){
+              container.innerHTML = '<p class="devices-empty">Todavía no se ha registrado ninguna PC.</p>';
+            }
           }
         })
         .catch(() => toast('No se pudo desconectar. Revise la conexión.', 'err'));
