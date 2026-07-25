@@ -610,6 +610,31 @@ footer.actions-footer .btn{flex:0 1 auto;}
   animation:confirmFadeIn .15s ease;
 }
 .confirm-overlay[hidden]{ display:none; }
+
+/* ---------- Pantalla de bloqueo total (dispositivo bloqueado por el administrador) ---------- */
+.blocked-overlay{
+  position:fixed; inset:0;
+  background:rgba(20,40,63,0.92);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  display:flex; align-items:center; justify-content:center;
+  z-index:999;
+  padding:1rem;
+  animation:confirmFadeIn .15s ease;
+}
+.blocked-overlay[hidden]{ display:none; }
+.blocked-box{
+  background:var(--color-surface);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-md), 0 20px 44px rgba(20,40,63,0.5);
+  padding:2rem 1.6rem;
+  width:min(440px, 92vw);
+  text-align:center;
+  animation:confirmPopIn .18s ease;
+}
+.blocked-box .blocked-icon{ font-size:2.6rem; margin-bottom:.6rem; }
+.blocked-box h2{ margin:0 0 .6rem 0; font-size:1.25rem; color:var(--color-danger); }
+.blocked-box p{ margin:0; font-size:.95rem; color:var(--color-text); line-height:1.5; }
 .confirm-box{
   background:var(--color-surface);
   border-radius:var(--radius-lg);
@@ -697,6 +722,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
 #linkFirebaseHelp:hover{ text-decoration:underline; }
 #cloudSyncStatus{ font-weight:600; }
 #cloudSyncStatus.ok{ color:var(--color-success-text); }
+#cloudRealtimeStatus.ok{ color:var(--color-success-text); font-weight:600; }
 #cloudSyncStatus.err{ color:var(--color-danger); }
 
 /* ---------- Modal de ayuda de Firebase ---------- */
@@ -797,6 +823,28 @@ footer.actions-footer .btn{flex:0 1 auto;}
 #devicesConnStatus{ margin:.2rem 0 .8rem 0; }
 #devicesConnStatus.ok{ color:var(--color-success-text); font-weight:600; }
 #devicesConnStatus.err{ color:var(--color-danger); font-weight:600; }
+.devices-filter-tabs{
+  display:flex; flex-wrap:wrap; gap:.4rem;
+  margin:0 0 .8rem 0;
+}
+.devices-filter-tab{
+  border:1px solid var(--color-border);
+  background:var(--color-surface);
+  color:var(--color-text-muted);
+  border-radius:999px;
+  padding:.35rem .8rem;
+  font-size:.82rem;
+  font-weight:600;
+  cursor:pointer;
+  transition:background .15s ease, color .15s ease, border-color .15s ease;
+}
+.devices-filter-tab:hover{ border-color:var(--color-primary); color:var(--color-text); }
+.devices-filter-tab.is-active{
+  background:var(--color-primary);
+  border-color:var(--color-primary);
+  color:#fff;
+}
+.device-card[data-hidden-by-filter="1"]{ display:none; }
 .devices-list{ display:flex; flex-direction:column; gap:.7rem; }
 .device-card{
   border:1px solid var(--color-border);
@@ -1270,6 +1318,13 @@ footer.actions-footer .btn{flex:0 1 auto;}
         <button type="button" class="btn btn-ghost btn-sm icon-only-btn" id="btnRefreshDevices" aria-label="Actualizar ahora" title="Actualizar ahora">🔄</button>
       </div>
       <p class="settings-hint" id="devicesConnStatus"></p>
+      <div class="devices-filter-tabs" id="devicesFilterTabs" role="tablist">
+        <button type="button" class="devices-filter-tab is-active" data-filter="all" role="tab" aria-selected="true">Todas</button>
+        <button type="button" class="devices-filter-tab" data-filter="online" role="tab" aria-selected="false">En línea</button>
+        <button type="button" class="devices-filter-tab" data-filter="offline" role="tab" aria-selected="false">Desconectadas</button>
+        <button type="button" class="devices-filter-tab" data-filter="noSucursal" role="tab" aria-selected="false">Sin sucursal asignada</button>
+        <button type="button" class="devices-filter-tab" data-filter="blocked" role="tab" aria-selected="false">Bloqueadas</button>
+      </div>
       <div id="devicesList" class="devices-list"></div>
     </div>
 
@@ -1354,6 +1409,14 @@ footer.actions-footer .btn{flex:0 1 auto;}
 </footer>
 
 <div id="toastContainer" aria-live="polite" role="status"></div>
+
+<div class="blocked-overlay" id="blockedOverlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="blockedHeading">
+  <div class="blocked-box">
+    <div class="blocked-icon">🚫</div>
+    <h2 id="blockedHeading">Acceso bloqueado por el administrador</h2>
+    <p>El administrador bloqueó esta PC desde el panel de "Actividad y permisos". No puede seguir usando el sistema ni se están enviando datos a la nube hasta que lo desbloqueen. Si es un error, contacte al administrador.</p>
+  </div>
+</div>
 
 <div class="confirm-overlay" id="confirmOverlay" hidden>
   <div class="confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="confirmMessage">
@@ -1715,6 +1778,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
   const DEVICE_ID_KEY = 'facturas_ress_device_id_v1';
   let deviceId = null;
   let deviceBlocked = false;     // true si el administrador bloqueó esta PC
+  let devicesFilter = 'all';     // pestaña activa en "Actividad y permisos de las PC"
   let deviceValueRef = null;     // listener sobre el nodo de ESTE dispositivo
   let deviceHeartbeatTimer = null;
 
@@ -2001,14 +2065,22 @@ footer.actions-footer .btn{flex:0 1 auto;}
         return;
       }
 
-      // Bloqueo remoto de sincronización
+      // Bloqueo remoto de sincronización y de acceso al sistema
       const nowBlocked = !!data.blocked;
       if (nowBlocked !== deviceBlocked){
         deviceBlocked = nowBlocked;
+        const blockedOverlay = document.getElementById('blockedOverlay');
         if (deviceBlocked){
-          toast('🚫 El administrador bloqueó la sincronización en la nube de esta PC.', 'warn');
+          toast('🚫 El administrador bloqueó esta PC.', 'warn');
+          // Cierra cualquier ventana abierta (incluido el panel de
+          // administrador) para que no quede nada usable detrás de la
+          // pantalla de bloqueo.
+          closeAdminPanelModal();
+          document.querySelectorAll('.floating-modal').forEach(m => { m.hidden = true; });
+          if (blockedOverlay) blockedOverlay.hidden = false;
         } else {
-          toast('✅ El administrador reactivó la sincronización en la nube de esta PC.', 'ok');
+          toast('✅ El administrador reactivó esta PC.', 'ok');
+          if (blockedOverlay) blockedOverlay.hidden = true;
           renderSummary(); // reenvía los totales actuales apenas se reactiva
         }
       }
@@ -2620,7 +2692,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
     const isCeibos = data.sucursalId === ADMIN_SUCURSAL_ID;
     const hasAccess = !!data.adminAccess;
 
-    return '<div class="device-card is-' + (isBlocked ? 'blocked' : (isOnline ? 'online' : 'offline')) + '" data-device-id="' + escapeHtml(id) + '">' +
+    return '<div class="device-card is-' + (isBlocked ? 'blocked' : (isOnline ? 'online' : 'offline')) + '" data-device-id="' + escapeHtml(id) + '" data-online="' + (isOnline ? '1' : '0') + '" data-blocked="' + (isBlocked ? '1' : '0') + '" data-has-sucursal="' + (data.sucursalId ? '1' : '0') + '">' +
       '<div class="device-card-top">' +
         '<span class="device-icon" aria-hidden="true">' + deviceIcon + '</span>' +
         '<div class="device-card-titles">' +
@@ -2638,8 +2710,8 @@ footer.actions-footer .btn{flex:0 1 auto;}
         '<button type="button" class="btn ' + (isBlocked ? 'btn-secondary' : 'btn-danger-outline') + ' btn-sm device-btn-toggle-block">' +
           (isBlocked ? '✅ Desbloquear' : '🚫 Bloquear') +
         '</button>' +
-        '<button type="button" class="btn btn-danger-outline btn-sm device-btn-delete">🚪 Salir / Desconectar sucursal</button>' +
-        '<button type="button" class="btn btn-ghost btn-sm device-btn-reset-first-run">🔄 Restablecer como nuevo</button>' +
+        '<button type="button" class="btn btn-danger-outline btn-sm device-btn-delete">🚪 Desconectar</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm device-btn-reset-first-run">🔄 Restablecer</button>' +
       '</div>' +
     '</div>';
   }
@@ -2664,6 +2736,9 @@ footer.actions-footer .btn{flex:0 1 auto;}
 
     card.classList.remove('is-online', 'is-offline', 'is-blocked');
     card.classList.add('is-' + statusClass);
+    card.setAttribute('data-online', isOnline ? '1' : '0');
+    card.setAttribute('data-blocked', isBlocked ? '1' : '0');
+    card.setAttribute('data-has-sucursal', data.sucursalId ? '1' : '0');
 
     const pill = card.querySelector('.device-status-pill');
     if (pill){
@@ -2736,7 +2811,56 @@ footer.actions-footer .btn{flex:0 1 auto;}
       const card = container.querySelector('.device-card[data-device-id="' + id.replace(/"/g, '') + '"]');
       if (card) container.appendChild(card);
     });
+
+    applyDevicesFilter();
   }
+
+  // Aplica la pestaña de filtro activa ("Todas", "En línea",
+  // "Desconectadas", "Sin sucursal asignada", "Bloqueadas") ocultando las
+  // tarjetas que no correspondan, sin volver a crear ninguna.
+  function applyDevicesFilter(){
+    const container = document.getElementById('devicesList');
+    if (!container) return;
+    const cards = container.querySelectorAll('.device-card');
+    let visibleCount = 0;
+    cards.forEach(card => {
+      const isOnline = card.getAttribute('data-online') === '1';
+      const isBlocked = card.getAttribute('data-blocked') === '1';
+      const hasSucursal = card.getAttribute('data-has-sucursal') === '1';
+      let show = true;
+      if (devicesFilter === 'online') show = isOnline && !isBlocked;
+      else if (devicesFilter === 'offline') show = !isOnline && !isBlocked;
+      else if (devicesFilter === 'noSucursal') show = !hasSucursal;
+      else if (devicesFilter === 'blocked') show = isBlocked;
+      card.setAttribute('data-hidden-by-filter', show ? '0' : '1');
+      if (show) visibleCount++;
+    });
+    let emptyMsg = container.querySelector('.devices-filter-empty');
+    if (!visibleCount && cards.length){
+      if (!emptyMsg){
+        emptyMsg = document.createElement('p');
+        emptyMsg.className = 'devices-empty devices-filter-empty';
+        container.appendChild(emptyMsg);
+      }
+      emptyMsg.textContent = 'No hay ninguna PC en esta categoría por ahora.';
+    } else if (emptyMsg){
+      emptyMsg.remove();
+    }
+  }
+
+  // Pestañas de filtro: cambia cuál está activa y vuelve a aplicar el
+  // filtro sin pedir los datos de nuevo a la nube.
+  document.getElementById('devicesFilterTabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('.devices-filter-tab');
+    if (!btn) return;
+    devicesFilter = btn.getAttribute('data-filter');
+    document.querySelectorAll('.devices-filter-tab').forEach(t => {
+      const active = t === btn;
+      t.classList.toggle('is-active', active);
+      t.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    applyDevicesFilter();
+  });
 
   // Lee la lista de PC de una sola vez y la dibuja al instante (botón
   // "🔄 Actualizar ahora", y también como respaldo automático periódico
@@ -2780,8 +2904,8 @@ footer.actions-footer .btn{flex:0 1 auto;}
     if (e.target.classList.contains('device-btn-toggle-block')){
       const currentlyBlocked = card.classList.contains('is-blocked');
       const confirmMsg = currentlyBlocked
-        ? '¿Desbloquear la sincronización de esta PC?'
-        : '¿Bloquear la sincronización de esta PC? Podrá seguir usando la app normalmente, pero no enviará ni recibirá datos de la nube hasta que la desbloquee.';
+        ? '¿Desbloquear esta PC? Va a poder volver a entrar y usar el sistema con normalidad.'
+        : '¿Bloquear esta PC? Va a dejar de poder usar el sistema por completo (se le muestra una pantalla de bloqueo) y no se enviarán ni recibirán datos de la nube hasta que la desbloquee.';
       const ok = await showConfirmDialog(confirmMsg);
       if (!ok) return;
       fbDb.ref('dispositivos/' + targetDeviceId + '/blocked').set(!currentlyBlocked)
