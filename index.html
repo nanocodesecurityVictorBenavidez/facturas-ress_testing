@@ -1237,8 +1237,8 @@ footer.actions-footer .btn{flex:0 1 auto;}
       <h3>Resumen de resultados</h3>
       <div class="sucursal-field">
         <label for="settingsResponsable">Responsable de turno por defecto</label>
-        <input type="text" id="settingsResponsable" readonly>
-        <p class="muted settings-hint">Es "Invitado" para las 3 sucursales por igual. Se rellenará en el campo "Responsable de turno" solo cuando esté vacío.</p>
+        <input type="text" id="settingsResponsable" placeholder="Ej. Invitado">
+        <p class="muted settings-hint">Se usa igual para las 3 sucursales. Se rellenará solo en el campo "Responsable de turno" cuando esté vacío (por ejemplo, después de "Eliminar datos de la nube" o "Limpiar todo").</p>
       </div>
     </div>
 
@@ -1647,6 +1647,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
   const LOCALSAVE_KEY = 'facturas_ress_localsave_enabled_v1';
   const THEME_KEY = 'facturas_ress_theme_v1';
   const CLOUD_CONFIG_KEY = 'facturas_ress_cloud_config_v1';
+  const RESPONSABLE_DEFAULT_KEY = 'facturas_ress_responsable_default_v1';
   const DEFAULT_PAGESIZE = 13;
 
   // Configuración de fábrica de la sincronización en la nube: viene ya
@@ -1669,9 +1670,14 @@ footer.actions-footer .btn{flex:0 1 auto;}
     cloud: { ...DEFAULT_CLOUD_CONFIG }
   };
 
-  // Responsable de turno por defecto: "Invitado" para las 3 sucursales
-  // por igual (ya no se escribe a mano ni varía según la sucursal).
+  // Responsable de turno por defecto: igual para las 3 sucursales. Es
+  // "Invitado" salvo que el administrador lo haya cambiado desde el panel
+  // (Ctrl+,) — ese cambio se guarda en esta misma PC.
   function computeDefaultResponsable(sucursalId){
+    try {
+      const saved = localStorage.getItem(RESPONSABLE_DEFAULT_KEY);
+      if (saved && saved.trim()) return saved.trim();
+    } catch (e){ /* silencioso */ }
     return 'Invitado';
   }
 
@@ -2882,7 +2888,18 @@ footer.actions-footer .btn{flex:0 1 auto;}
     if (sucursalId !== currentSucursalId){
       switchSucursalProfile(sucursalId);
     }
-    document.getElementById('settingsResponsable').value = appSettings.responsableDefault;
+    const oldResponsableDefault = appSettings.responsableDefault;
+    const newResponsableDefault = document.getElementById('settingsResponsable').value.trim() || 'Invitado';
+    try { localStorage.setItem(RESPONSABLE_DEFAULT_KEY, newResponsableDefault); } catch (e){ /* silencioso */ }
+    appSettings.responsableDefault = newResponsableDefault;
+    document.getElementById('settingsResponsable').value = newResponsableDefault;
+    // Si el campo "Responsable de turno" en pantalla estaba vacío o tenía
+    // el valor por defecto anterior (no algo que el usuario haya escrito a
+    // mano para esta sesión), lo actualizamos al nuevo valor.
+    const inputResp = document.getElementById('inputResponsable');
+    if (inputResp && (!inputResp.value || inputResp.value === oldResponsableDefault)){
+      inputResp.value = newResponsableDefault;
+    }
 
     // Sincronización en la nube
     const cloudEnabled = document.getElementById('settingsCloudEnabled').checked;
