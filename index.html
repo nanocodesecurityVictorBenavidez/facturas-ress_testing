@@ -6,17 +6,23 @@
 <title>Facturas RESS</title>
 
 <!-- ===================== LIBRERÍAS EXTERNAS (CDN) ===================== -->
+<!-- defer: se descargan en paralelo SIN bloquear el dibujado de la página
+     (así la pantalla de bloqueo/bienvenida aparece al instante, en vez de
+     quedar en blanco esperando a que terminen de bajar estas librerías
+     pesadas). Se siguen ejecutando en este mismo orden, justo antes de
+     que arranque el script principal de más abajo (que también lleva
+     defer, para no romper el orden). -->
 <!-- Tesseract.js: OCR de imágenes, se ejecuta 100% en el navegador -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js" defer></script>
 <!-- xlsx-js-style: fork de SheetJS con soporte de estilos (colores, negritas) -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js" defer></script>
 <!-- Firebase (modo "compat"): usado únicamente para la sincronización en
      tiempo real de los totales entre sucursales (ver AJUSTES GENERALES →
      Sincronización en la nube). Si el usuario no configura Firebase, estos
      scripts se cargan pero no hacen nada. -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
 
 <style>
 /* ======================================================================
@@ -614,13 +620,11 @@ footer.actions-footer .btn{flex:0 1 auto;}
 /* ---------- Pantalla de bloqueo total (dispositivo bloqueado por el administrador) ---------- */
 .blocked-overlay{
   position:fixed; inset:0;
-  background:rgba(20,40,63,0.92);
-  backdrop-filter:blur(6px);
-  -webkit-backdrop-filter:blur(6px);
+  background:var(--color-danger-bg, #1a2233);
+  background-color:#1a2233;
   display:flex; align-items:center; justify-content:center;
   z-index:999;
   padding:1rem;
-  animation:confirmFadeIn .15s ease;
 }
 .blocked-overlay[hidden]{ display:none; }
 .blocked-box{
@@ -635,6 +639,21 @@ footer.actions-footer .btn{flex:0 1 auto;}
 .blocked-box .blocked-icon{ font-size:2.6rem; margin-bottom:.6rem; }
 .blocked-box h2{ margin:0 0 .6rem 0; font-size:1.25rem; color:var(--color-danger); }
 .blocked-box p{ margin:0; font-size:.95rem; color:var(--color-text); line-height:1.5; }
+
+/* Cuando esta PC está bloqueada por el administrador, se oculta TODO el
+   diseño de la aplicación (no solo se tapa con un overlay encima) — igual
+   de estricto que el bloque de impresión de más arriba. La clase la pone
+   un script muy temprano (ver justo después de <body>, usando el último
+   estado de bloqueo guardado) para que no se alcance a ver ni un
+   parpadeo de Facturas RESS detrás, ni siquiera al recargar la página. */
+html.fr-blocked body > *:not(#blockedOverlay){ display:none !important; }
+html.fr-blocked #blockedOverlay{ display:flex !important; }
+
+/* Mismo tratamiento, pero para el mensaje de bienvenida / elegir sucursal
+   la primera vez que se usa esta PC (o después de un Restablecer): se
+   oculta TODO el diseño de la app detrás, no solo un overlay encima. */
+html.fr-welcome body > *:not(#sucursalOverlay){ display:none !important; }
+html.fr-welcome #sucursalOverlay{ display:flex !important; }
 .confirm-box{
   background:var(--color-surface);
   border-radius:var(--radius-lg);
@@ -996,6 +1015,22 @@ footer.actions-footer .btn{flex:0 1 auto;}
 </style>
 </head>
 <body>
+<script>
+  // Se ejecuta ANTES que el resto de la página (incluso antes de conectar
+  // con la nube): si la última vez que esta PC supo de sí misma estaba
+  // bloqueada, o si todavía no tiene ninguna sucursal configurada, oculta
+  // todo de inmediato usando lo último guardado en este navegador — así,
+  // al recargar, no se alcanza a ver ni un parpadeo de Facturas RESS
+  // detrás mientras se confirma con la nube o se elige sucursal. El
+  // script principal (más abajo) corrige esto apenas corresponda.
+  try {
+    if (localStorage.getItem('facturas_ress_last_blocked_v1') === '1'){
+      document.documentElement.classList.add('fr-blocked');
+    } else if (!localStorage.getItem('facturas_ress_sucursal_v1')){
+      document.documentElement.classList.add('fr-welcome');
+    }
+  } catch (e){ /* silencioso */ }
+</script>
 
 <header class="app-header">
   <div class="header-text">
@@ -1454,6 +1489,15 @@ footer.actions-footer .btn{flex:0 1 auto;}
    ANALIZADOR DE FACTURAS — LÓGICA PRINCIPAL
    Todo el procesamiento ocurre localmente en el navegador.
    ====================================================================== */
+// Las librerías externas de arriba (Tesseract, xlsx, Firebase) ahora
+// cargan con "defer" para no bloquear el dibujado inicial de la página
+// (ver comentario junto a esos <script src>). Como este script SÍ está
+// en línea (sin src), el atributo defer no le hace nada a él mismo — así
+// que se espera a "DOMContentLoaded" a propósito: ese evento se dispara
+// justo después de que terminan de ejecutarse todos los scripts con
+// defer, así que para cuando arranca todo lo de acá abajo, firebase/
+// Tesseract/XLSX ya están listos para usarse.
+document.addEventListener('DOMContentLoaded', function(){
 (function(){
   'use strict';
 
@@ -1620,8 +1664,11 @@ footer.actions-footer .btn{flex:0 1 auto;}
 
     // Fondo opaco (sin ver la app detrás) SOLO en modo bienvenida; si se
     // abre desde ⚙️ Ajustes para cambiar de sucursal se deja el fondo
-    // semitransparente normal de los demás cuadros de confirmación.
+    // semitransparente normal de los demás cuadros de confirmación. Y,
+    // además, oculta TODO el diseño de la app detrás (no solo el fondo
+    // del modal) — igual que con la pantalla de bloqueo.
     overlay.classList.toggle('sucursal-overlay-lock', !!isFirstRun);
+    document.documentElement.classList.toggle('fr-welcome', !!isFirstRun);
 
     if (isFirstRun){
       heading.textContent = '👋 ¡Bienvenido a Facturas RESS!';
@@ -1657,6 +1704,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
 
   function closeSucursalModal(){
     document.getElementById('sucursalOverlay').hidden = true;
+    document.documentElement.classList.remove('fr-welcome');
   }
 
   document.getElementById('btnSucursalAccept').addEventListener('click', () => {
@@ -1668,6 +1716,14 @@ footer.actions-footer .btn{flex:0 1 auto;}
     toast(wasFirstRun
       ? 'Bienvenido — sucursal configurada: ' + getSucursal(id).label
       : 'Sucursal actualizada: ' + getSucursal(id).label, 'ok');
+    if (wasFirstRun){
+      // Solo en el mensaje de bienvenida (primera vez, o después de un
+      // Restablecer/Desconectar): recarga la página apenas se confirma la
+      // sucursal, para que la PC arranque completamente de cero con esa
+      // sucursal ya aplicada — le da un momento a que el guardado inicial
+      // termine de enviarse antes de recargar.
+      setTimeout(() => { location.reload(); }, 400);
+    }
   });
 
   // En modo bienvenida este botón queda oculto (un solo botón: Continuar
@@ -1702,7 +1758,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
      navegador (localStorage).
      ------------------------------------------------------------------ */
   const PAGESIZE_KEY = 'facturas_ress_pagesize_v1';
-  const LOCALSAVE_KEY = 'facturas_ress_localsave_enabled_v1';
+  const LOCALSAVE_KEY = 'facturas_ress_localsave_enabled_v2'; // v2: se cambió a propósito para que todas las PC olviden cualquier "desactivado" guardado de antes y vuelvan a arrancar con el respaldo local activado por defecto
   const THEME_KEY = 'facturas_ress_theme_v1';
   const CLOUD_CONFIG_KEY = 'facturas_ress_cloud_config_v1';
   const RESPONSABLE_DEFAULT_KEY = 'facturas_ress_responsable_default_v1';
@@ -1776,10 +1832,19 @@ footer.actions-footer .btn{flex:0 1 auto;}
   // panel de administrador identifique y gestione cada PC por separado,
   // incluso si dos PC tienen elegida la misma sucursal por error.
   const DEVICE_ID_KEY = 'facturas_ress_device_id_v1';
+  const BLOCKED_CACHE_KEY = 'facturas_ress_last_blocked_v1'; // ver script temprano justo después de <body>
   let deviceId = null;
-  let deviceBlocked = false;     // true si el administrador bloqueó esta PC
+  // Arranca con el último estado de bloqueo que se conoció en esta PC (el
+  // mismo dato que ya usó el script temprano para ocultar todo antes de
+  // que cargara el resto de la página). Así, si de verdad seguía
+  // bloqueada, no hace falta "redetectarlo" ni recargar de nuevo — ya
+  // está mostrado. Y si algo cambió mientras tanto, el oyente de la nube
+  // (más abajo) lo corrige apenas se conecte.
+  let deviceBlocked = false;
+  try { deviceBlocked = localStorage.getItem(BLOCKED_CACHE_KEY) === '1'; } catch (e){ /* silencioso */ }
   let devicesFilter = 'all';     // pestaña activa en "Actividad y permisos de las PC"
   let deviceValueRef = null;     // listener sobre el nodo de ESTE dispositivo
+  let devicesListRef = null;     // listener en vivo sobre "dispositivos" (panel de Actividad y permisos)
   let deviceHeartbeatTimer = null;
 
   function getOrCreateDeviceId(){
@@ -1911,9 +1976,18 @@ footer.actions-footer .btn{flex:0 1 auto;}
             // página). Si el usuario recién está eligiendo sucursal en
             // este momento, switchSucursalProfile lo hace por su cuenta.
             if (currentSucursalId) listenToSucursalInvoices(currentSucursalId);
-            // Por si algo se quedó sin enviar mientras se esperaba la
-            // autenticación (ej. cambios de Tarjetas/Coral hechos justo
-            // al abrir la app), se reenvían los totales actuales ahora.
+            // Solo actualiza los números en pantalla (por si Tarjetas/
+            // Coral se escribieron justo mientras se esperaba la
+            // autenticación) — NO debe disparar un guardado real acá:
+            // en este punto todavía no se sabe con certeza si el
+            // respaldo local ya se restauró (eso pasa más abajo en el
+            // arranque) ni si ya llegó el primer dato real de la nube
+            // para esta sucursal. Sin este freno, si el respaldo local
+            // de esta PC estuviera vacío por algún motivo, se llegaba a
+            // enviar una tabla vacía a la nube y borrar los datos reales
+            // compartidos con las demás PC, justo al recargar la página.
+            skipNextCloudPush = true;
+            skipNextLocalSync = true;
             if (currentSucursalId) renderSummary();
           })
           .catch(() => setCloudStatus('⚠️ Conectado, pero no se pudo autenticar. Active "Anónimo" en Firebase → Authentication → Sign-in method.', 'err'));
@@ -1924,6 +1998,10 @@ footer.actions-footer .btn{flex:0 1 auto;}
         listenToOwnDevice();
         flushAuthReadyCallbacks();
         if (currentSucursalId) listenToSucursalInvoices(currentSucursalId);
+        // Mismo freno que en la rama de arriba: solo refresca pantalla,
+        // no dispara un guardado real todavía.
+        skipNextCloudPush = true;
+        skipNextLocalSync = true;
         if (currentSucursalId) renderSummary();
       }
       return true;
@@ -1937,6 +2015,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
   function disconnectFirebase(){
     if (branchesValueRef){ branchesValueRef.off(); branchesValueRef = null; }
     if (deviceValueRef){ deviceValueRef.off(); deviceValueRef = null; }
+    if (devicesListRef){ devicesListRef.off(); devicesListRef = null; }
     stopListeningToSucursalInvoices();
     stopRealtimeConnectionMonitor();
     if (deviceHeartbeatTimer){ clearInterval(deviceHeartbeatTimer); deviceHeartbeatTimer = null; }
@@ -2031,22 +2110,72 @@ footer.actions-footer .btn{flex:0 1 auto;}
     }
   }
 
-  // Si el administrador elimina el registro de ESTA PC desde "Actividad y
+  // Muestra u oculta la pantalla de bloqueo total, ocultando (con
+  // html.fr-blocked) o mostrando de nuevo todo el diseño de la app, y
+  // guarda el resultado en localStorage para que el script temprano de
+  // <body> lo use la próxima vez que se cargue la página, sin parpadeos.
+  function applyBlockedUI(isBlocked){
+    document.documentElement.classList.toggle('fr-blocked', isBlocked);
+    const blockedOverlay = document.getElementById('blockedOverlay');
+    if (blockedOverlay) blockedOverlay.hidden = !isBlocked;
+    try { localStorage.setItem(BLOCKED_CACHE_KEY, isBlocked ? '1' : '0'); } catch (e){ /* silencioso */ }
+  }
+
+  // Escape de emergencia SOLO para el administrador: si por algún motivo
+  // esta PC quedara mostrando la pantalla de bloqueo por error (dato
+  // guardado viejo, ajuste mal hecho, etc.) y no hay forma de llegar a
+  // "Actividad y permisos" para arreglarlo porque está todo tapado, esta
+  // combinación de teclas (no aparece en ningún botón, a propósito) borra
+  // el último estado de bloqueo GUARDADO EN ESTA PC y recarga para volver
+  // a preguntarle a la nube cuál es el estado real — no "desbloquea"
+  // nada en la nube, solo descarta un dato local atascado.
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.altKey && e.shiftKey && (e.key === 'R' || e.key === 'r')){
+      try { localStorage.removeItem(BLOCKED_CACHE_KEY); } catch (err){ /* silencioso */ }
+      location.reload();
+    }
+  });
+
+
   // permisos" (por ejemplo, para liberar su sucursal), esta PC lo nota y
   // se comporta como un cierre de sesión: guarda lo que hubiera, suelta la
   // sucursal, limpia el encabezado y la pantalla, y vuelve a pedir elegir
   // sucursal — sin que nadie tenga que tocar esta PC físicamente.
   function handleOwnDeviceRecordDeletedRemotely(skipToast){
-    if (!currentSucursalId) return; // ya estaba sin sucursal, nada que hacer
+    // El registro de esta PC ya no existe en la nube, así que tampoco tiene
+    // sentido que siga bloqueada — si lo estaba, se le quita el bloqueo y
+    // la pantalla de bloqueo al instante.
+    if (deviceBlocked){
+      deviceBlocked = false;
+      applyBlockedUI(false);
+    }
+    if (!currentSucursalId){
+      // Ya estaba sin sucursal, nada más que hacer.
+      return;
+    }
     flushCurrentSucursalDataBeforeLeaving();
     stopListeningToSucursalInvoices();
-    try { localStorage.removeItem(SUCURSAL_KEY); } catch (e){ /* silencioso */ }
+    try {
+      localStorage.removeItem(SUCURSAL_KEY);
+      // También se olvida la "última sucursal usada" en esta PC: al ser un
+      // desconectado hecho por el administrador (no un cierre de sesión
+      // propio), se le vuelve a ofrecer elegir entre las 3 sucursales,
+      // igual que la primera vez que se abrió la app, en vez de quedar
+      // atada solo a la que tenía antes.
+      localStorage.removeItem(LAST_SUCURSAL_KEY);
+    } catch (e){ /* silencioso */ }
     currentSucursalId = null;
     updateAdminAccessLocal();
     clearSucursalBadge();
     clearWorkingDataOnScreen();
     recalcAll();
     closeAdminPanelModal();
+    // Actualiza también el registro de ESTA PC en la nube (mismo camino
+    // que usa una PC nueva de verdad): con currentSucursalId ya en null,
+    // esto escribe sucursalId/sucursalLabel como null, así el panel de
+    // "Actividad y permisos" del administrador la muestra al instante como
+    // "sin sucursal aún" — no se queda pegada mostrando la sucursal vieja.
+    if (fbDb) registerDevicePresence();
     if (!skipToast) toast('🛠️ El administrador eliminó el registro de esta PC. Elija de nuevo la sucursal.', 'warn');
     openSucursalModal(true);
   }
@@ -2069,18 +2198,18 @@ footer.actions-footer .btn{flex:0 1 auto;}
       const nowBlocked = !!data.blocked;
       if (nowBlocked !== deviceBlocked){
         deviceBlocked = nowBlocked;
-        const blockedOverlay = document.getElementById('blockedOverlay');
         if (deviceBlocked){
           toast('🚫 El administrador bloqueó esta PC.', 'warn');
           // Cierra cualquier ventana abierta (incluido el panel de
           // administrador) para que no quede nada usable detrás de la
-          // pantalla de bloqueo.
+          // pantalla de bloqueo, y oculta TODO el diseño de la app (no
+          // solo un overlay encima). Esto es instantáneo.
           closeAdminPanelModal();
           document.querySelectorAll('.floating-modal').forEach(m => { m.hidden = true; });
-          if (blockedOverlay) blockedOverlay.hidden = false;
+          applyBlockedUI(true);
         } else {
           toast('✅ El administrador reactivó esta PC.', 'ok');
-          if (blockedOverlay) blockedOverlay.hidden = true;
+          applyBlockedUI(false);
           if (currentSucursalId && !data.sucursalId){
             // Mientras estaba bloqueada, el administrador la desconectó de
             // su sucursal (quedó libre para otra PC) — hay que pedirle que
@@ -2116,10 +2245,18 @@ footer.actions-footer .btn{flex:0 1 auto;}
       // Comando remoto: restablecer esta PC como si fuera un dispositivo
       // nuevo (vuelve a mostrar las 3 sucursales en la bienvenida).
       if (data.resetToFirstRun){
-        fbDb.ref('dispositivos/' + deviceId + '/resetToFirstRun').remove().catch(() => {});
-        try { localStorage.removeItem(LAST_SUCURSAL_KEY); } catch (e){ /* silencioso */ }
-        toast('🛠️ El administrador restableció esta PC como dispositivo nuevo.', 'warn');
-        handleOwnDeviceRecordDeletedRemotely(true);
+        if (data.blocked){
+          // Sigue bloqueada de verdad: no se toca nada todavía (ni la
+          // pantalla de bloqueo, ni la sucursal) para no generar un
+          // parpadeo raro entre "bienvenida" y "bloqueada". El pedido de
+          // restablecer se queda guardado tal cual, y se aplica solo en
+          // cuanto el administrador también la desbloquee.
+        } else {
+          fbDb.ref('dispositivos/' + deviceId + '/resetToFirstRun').remove().catch(() => {});
+          try { localStorage.removeItem(LAST_SUCURSAL_KEY); } catch (e){ /* silencioso */ }
+          toast('🛠️ El administrador restableció esta PC como dispositivo nuevo.', 'warn');
+          handleOwnDeviceRecordDeletedRemotely(true);
+        }
       }
 
       // Corrección remota de sucursal: cambia de perfil igual que si se
@@ -2150,7 +2287,11 @@ footer.actions-footer .btn{flex:0 1 auto;}
     if (skipNextLocalSync){ skipNextLocalSync = false; return; }
     clearTimeout(localSyncTimer);
     localSyncTimer = setTimeout(() => {
-      persistInvoicesToStorage(null);
+      // Si en ese momento la tabla está vacía, se guarda igual (para que
+      // el vaciado de la tabla se refleje bien), pero Tarjetas/Coral/
+      // Responsable se guardan en su valor por defecto en vez de lo
+      // tipeado en pantalla — así ese dato suelto no queda guardado.
+      persistInvoicesToStorage(null, undefined, state.invoices.length === 0);
     }, 250);
   }
 
@@ -2166,12 +2307,16 @@ footer.actions-footer .btn{flex:0 1 auto;}
     if (suppressCloudEcho) return;
     clearTimeout(cloudSyncTimer);
     cloudSyncTimer = setTimeout(() => {
-      pushSucursalTotalsToCloud(totals);
-      pushInvoicesToCloud();
+      // Misma idea que en scheduleLocalSync: la tabla (y sus totales, que
+      // ya dan 0 solos si está vacía) siempre se envían; Tarjetas/Coral/
+      // Responsable se envían en su valor por defecto si no hay facturas.
+      const forceDefaultResumen = state.invoices.length === 0;
+      pushSucursalTotalsToCloud(totals, forceDefaultResumen);
+      pushInvoicesToCloud(forceDefaultResumen);
     }, 250);
   }
 
-  function pushSucursalTotalsToCloud(totals){
+  function pushSucursalTotalsToCloud(totals, forceDefaultResumen){
     if (!appSettings.cloud.enabled || !fbDb || !fbAuthReady || !currentSucursalId || deviceBlocked) return;
     try {
       const s = getSucursal(currentSucursalId);
@@ -2180,10 +2325,10 @@ footer.actions-footer .btn{flex:0 1 auto;}
         label: s.label,
         ventaTotal: totals.ventaTotal,
         efectivo: totals.efectivo,
-        tarjetas: totals.tarjetas,
-        coral: totals.coral,
+        tarjetas: forceDefaultResumen ? 0 : totals.tarjetas,
+        coral: forceDefaultResumen ? 0 : totals.coral,
         totalFacturas: totals.totalFacturas,
-        responsable: inputResp ? inputResp.value : '',
+        responsable: forceDefaultResumen ? (appSettings.responsableDefault || 'Invitado') : (inputResp ? inputResp.value : ''),
         updatedAt: firebase.database.ServerValue.TIMESTAMP
       });
       registerDevicePresence(); // cada envío de totales también renueva la señal de actividad
@@ -2207,14 +2352,16 @@ footer.actions-footer .btn{flex:0 1 auto;}
   let lastPushedInvoicesJSON = null; // lo último que ESTA PC envió (para no volver a aplicarlo)
   let lastPushedResumenJSON = null;
 
-  function pushInvoicesToCloud(){
+  function pushInvoicesToCloud(forceDefaultResumen){
     if (!appSettings.cloud.enabled || !fbDb || !fbAuthReady || !currentSucursalId || deviceBlocked || suppressCloudEcho) return;
     try {
-      const resumenPayload = {
-        tarjetas: document.getElementById('inputTarjetas').value,
-        coral: document.getElementById('inputCoral').value,
-        responsable: document.getElementById('inputResponsable').value
-      };
+      const resumenPayload = forceDefaultResumen
+        ? { tarjetas: '0', coral: '0', responsable: appSettings.responsableDefault || 'Invitado' }
+        : {
+            tarjetas: document.getElementById('inputTarjetas').value,
+            coral: document.getElementById('inputCoral').value,
+            responsable: document.getElementById('inputResponsable').value
+          };
       // Recuerda exactamente lo que se envió, para poder ignorar el "eco"
       // cuando la nube nos devuelva este mismo cambio (así no se pisa lo
       // que el usuario siga escribiendo o marcando mientras tanto).
@@ -2667,6 +2814,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
 
   function closeAdminPanelModal(){
     closeFloatingModal(document.getElementById('adminPanelModal'));
+    stopDevicesListListener();
   }
 
   // Dibuja una tarjeta por cada PC registrada, con su estado, sucursal
@@ -2892,9 +3040,9 @@ footer.actions-footer .btn{flex:0 1 auto;}
     applyDevicesFilter();
   });
 
-  // Lee la lista de PC de una sola vez y la dibuja al instante (botón
-  // "🔄 Actualizar ahora", y también como respaldo automático periódico
-  // por si la actualización en vivo tarda o se corta un momento).
+  // Lee la lista de PC de una sola vez y la dibuja al instante (usado por
+  // el botón "🔄 Actualizar ahora", como forzado manual además del
+  // listener en vivo de abajo).
   function refreshDevicesNow(){
     const connStatus = document.getElementById('devicesConnStatus');
     if (!appSettings.cloud.enabled || !fbDb) return;
@@ -2909,9 +3057,12 @@ footer.actions-footer .btn{flex:0 1 auto;}
       });
   }
 
-  // Carga la lista de PC una sola vez (al abrir el panel, o al guardar/
-  // restaurar ajustes). Para actualizarla después, se usa el botón
-  // "🔄 Actualizar ahora" — ya no se actualiza sola en tiempo real.
+  // Se conecta EN VIVO al nodo "dispositivos": cualquier cambio (otra PC
+  // se conecta, se desconecta, se bloquea, cambia de sucursal, etc.) se ve
+  // reflejado al instante en el panel, sin tener que presionar
+  // "🔄 Actualizar ahora". Las tarjetas se actualizan en el lugar (ver
+  // updateDeviceCardInPlace), así que no parpadean ni pierden lo que el
+  // usuario esté escribiendo/marcando en ese momento.
   function startDevicesListListener(){
     const container = document.getElementById('devicesList');
     const connStatus = document.getElementById('devicesConnStatus');
@@ -2921,7 +3072,25 @@ footer.actions-footer .btn{flex:0 1 auto;}
       connStatus.className = 'err';
       return;
     }
-    refreshDevicesNow();
+    stopDevicesListListener();
+    connStatus.innerHTML = statusMessageHtml('Conectando en tiempo real...', 'connecting');
+    connStatus.className = '';
+    devicesListRef = fbDb.ref('dispositivos');
+    devicesListRef.on('value', (snap) => {
+      renderDevicesList(snap.val() || {});
+      connStatus.innerHTML = statusMessageHtml('En vivo — actualizado ' + new Date().toLocaleTimeString('es-EC', { hour:'2-digit', minute:'2-digit', second:'2-digit' }), 'ok');
+      connStatus.className = 'ok';
+    }, () => {
+      connStatus.innerHTML = statusMessageHtml('⚠️ No se pudo leer la actividad de las PC. Revise las reglas de Firebase (nodo "dispositivos").', 'err');
+      connStatus.className = 'err';
+    });
+  }
+
+  // Se desconecta del listener en vivo (al cerrar el panel de
+  // administrador, o al apagar la sincronización en la nube), para no
+  // seguir gastando lecturas de Firebase sin necesidad.
+  function stopDevicesListListener(){
+    if (devicesListRef){ devicesListRef.off(); devicesListRef = null; }
   }
 
   // Clics dentro de la lista de dispositivos (delegado, porque las
@@ -3069,6 +3238,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
       }
     } else {
       disconnectFirebase();
+      stopDevicesListListener();
       setCloudStatus('', '');
       document.getElementById('devicesList').innerHTML = '';
       document.getElementById('devicesConnStatus').textContent = '';
@@ -3373,7 +3543,11 @@ footer.actions-footer .btn{flex:0 1 auto;}
     // Guarda estos mismos datos en localStorage (siempre, como respaldo
     // de esta PC) y los envía a la nube (si la sincronización entre
     // sucursales está activada) para que las otras dos PC los vean en
-    // tiempo real en su panel "🏢 Sucursales".
+    // tiempo real en su panel "🏢 Sucursales". Esto SIEMPRE se dispara
+    // (incluida la tabla quedando vacía, para que se vea en tiempo real en
+    // las demás PC) — lo único que cambia según haya o no facturas es si
+    // Tarjetas/Coral/Responsable se guardan tal cual o con su valor por
+    // defecto (ver dentro de scheduleLocalSync/scheduleCloudSync).
     scheduleLocalSync();
     scheduleCloudSync(totals);
   }
@@ -4631,7 +4805,12 @@ footer.actions-footer .btn{flex:0 1 auto;}
   // usa tanto desde el botón "Guardar datos" como desde el guardado
   // automático (ver AJUSTES GENERALES) y al cambiar de perfil. Devuelve
   // true si se guardó correctamente.
-  function persistInvoicesToStorage(toastMsg, sucursalId){
+  // forceDefaultResumen: si viene en true (solo lo pasa el guardado
+  // AUTOMÁTICO cuando la tabla está vacía), guarda Tarjetas/Coral/
+  // Responsable en su valor por defecto en vez de lo tipeado en pantalla.
+  // La tabla de facturas (payload.invoices) SIEMPRE se guarda tal cual,
+  // sin importar este parámetro.
+  function persistInvoicesToStorage(toastMsg, sucursalId, forceDefaultResumen){
     // El respaldo en ESTE navegador está desactivado por ajuste del
     // usuario (ver ⚙️ Ajustes generales → Guardado). No se escribe nada
     // en localStorage, pero esto no debe bloquear el resto del flujo (por
@@ -4643,9 +4822,9 @@ footer.actions-footer .btn{flex:0 1 auto;}
     try {
       const payload = {
         invoices: state.invoices,
-        tarjetas: document.getElementById('inputTarjetas').value,
-        coral: document.getElementById('inputCoral').value,
-        responsable: document.getElementById('inputResponsable').value,
+        tarjetas: forceDefaultResumen ? '0' : document.getElementById('inputTarjetas').value,
+        coral: forceDefaultResumen ? '0' : document.getElementById('inputCoral').value,
+        responsable: forceDefaultResumen ? (appSettings.responsableDefault || 'Invitado') : document.getElementById('inputResponsable').value,
         savedAt: new Date().toISOString()
       };
       localStorage.setItem(getStorageKeyFor(sucursalId || currentSucursalId), JSON.stringify(payload));
@@ -4684,7 +4863,21 @@ footer.actions-footer .btn{flex:0 1 auto;}
 
   // Aplica al Resumen de resultados (Tarjetas, Coral, Responsable) los
   // valores guardados, si existen en el respaldo.
-  function restoreSummaryFields(data){
+  // El segundo parámetro (hasInvoices) es opcional y por defecto true (no
+  // cambia nada para quien ya lo llamaba sin ese dato). Cuando se pasa
+  // explícitamente en false, ignora los valores guardados y deja
+  // Tarjetas/Coral/Responsable en su valor por defecto — se usa al
+  // restaurar un respaldo (local o de la nube) que resulta no tener
+  // ninguna factura: como ya no se guardan Tarjetas/Coral/Responsable
+  // automáticamente sin facturas, si un respaldo viejo (de antes de este
+  // cambio) todavía tuviera algo ahí, tampoco se restaura por error.
+  function restoreSummaryFields(data, hasInvoices){
+    if (hasInvoices === false){
+      document.getElementById('inputTarjetas').value = '0';
+      document.getElementById('inputCoral').value = '0';
+      document.getElementById('inputResponsable').value = appSettings.responsableDefault || 'Invitado';
+      return;
+    }
     if (typeof data.tarjetas !== 'undefined') document.getElementById('inputTarjetas').value = data.tarjetas;
     if (typeof data.coral !== 'undefined') document.getElementById('inputCoral').value = data.coral;
     if (typeof data.responsable !== 'undefined'){
@@ -4724,7 +4917,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
         if (Array.isArray(data.invoices)){
           clearWorkingDataOnScreen();
           state.invoices = ensureInsSeq(data.invoices);
-          restoreSummaryFields(data);
+          restoreSummaryFields(data, data.invoices.length > 0);
           if (appSettings.responsableDefault){
             const inputResp = document.getElementById('inputResponsable');
             if (inputResp && !inputResp.value){ inputResp.value = appSettings.responsableDefault; }
@@ -4818,12 +5011,13 @@ footer.actions-footer .btn{flex:0 1 auto;}
       }
       if (raw){
         const data = JSON.parse(raw);
-        // Se restaura en cuanto exista un respaldo guardado, tenga o no
-        // facturas (Tarjetas/Coral/Responsable deben recuperarse igual
-        // aunque todavía no se haya agregado ninguna factura).
+        // Si el respaldo no tiene ninguna factura, Tarjetas/Coral/
+        // Responsable NO se restauran (quedan en su valor por defecto) —
+        // ya no se guardan solos sin facturas, así que si un respaldo
+        // viejo todavía los tuviera, tampoco se resucitan al abrir la app.
         if (Array.isArray(data.invoices)){
           state.invoices = ensureInsSeq(data.invoices);
-          restoreSummaryFields(data);
+          restoreSummaryFields(data, data.invoices.length > 0);
           skipNextCloudPush = true; // esto es solo un vistazo local: no sobreescribir la nube con esto
           recalcAll();
         }
@@ -4831,7 +5025,35 @@ footer.actions-footer .btn{flex:0 1 auto;}
     } catch (err){ /* silencioso */ }
   })();
 
-  document.getElementById('btnClearAll').addEventListener('click', () => {
+  // Revisa si realmente no hay NADA que limpiar/eliminar para la sucursal
+  // actual: ni en la tabla en pantalla, ni en el respaldo de este
+  // navegador, ni en la nube. Se usa antes de "Limpiar" y "Eliminar
+  // Datos" para avisar "no hay datos" en vez de mostrar el mensaje normal
+  // de borrado cuando en realidad no hay nada guardado.
+  async function tableAndStorageAreEmpty(){
+    if (state.invoices.length > 0) return false;
+    try {
+      const raw = localStorage.getItem(getStorageKeyFor(currentSucursalId));
+      if (raw){
+        const data = JSON.parse(raw);
+        if (Array.isArray(data.invoices) && data.invoices.length > 0) return false;
+      }
+    } catch (e){ /* silencioso */ }
+    if (appSettings.cloud.enabled && fbDb && fbAuthReady && currentSucursalId){
+      try {
+        const snap = await fbDb.ref('facturas_data/' + currentSucursalId + '/invoices').once('value');
+        const cloudInvoices = snap.val();
+        if (Array.isArray(cloudInvoices) && cloudInvoices.length > 0) return false;
+      } catch (e){ /* si falla la lectura, no se bloquea por esto */ }
+    }
+    return true;
+  }
+
+  document.getElementById('btnClearAll').addEventListener('click', async () => {
+    if (await tableAndStorageAreEmpty()){
+      toast('No hay datos: la tabla está vacía.', 'warn');
+      return;
+    }
     // "Limpiar" es solo una limpieza VISUAL de esta pantalla — no
     // borra nada guardado. Por eso se marcan skipNextCloudPush y
     // skipNextLocalSync antes de recalcAll(): así el recalculo que sigue
@@ -4849,6 +5071,10 @@ footer.actions-footer .btn{flex:0 1 auto;}
   // a todas las PC que la estén usando, no solo esta), además del
   // respaldo local y la tabla en pantalla.
   document.getElementById('btnDeleteSavedData').addEventListener('click', async () => {
+    if (await tableAndStorageAreEmpty()){
+      toast('No hay datos: la tabla está vacía.', 'warn');
+      return;
+    }
     const sucLabel = currentSucursalId ? getSucursal(currentSucursalId).label : 'esta sucursal';
     const ok = await showConfirmDialog('Esto borra los datos guardados de "' + sucLabel + '" EN LA NUBE — afecta a TODAS las PC que estén usando esa sucursal ahora mismo, no solo esta. No se puede deshacer. ¿Desea continuar?');
     if (!ok) return;
@@ -5244,6 +5470,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
      ------------------------------------------------------------------ */
   startApp();
 })();
+});
 </script>
 </body>
 </html>
