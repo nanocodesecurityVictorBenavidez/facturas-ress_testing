@@ -670,6 +670,15 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
   margin:0 0 1.1rem 0;
 }
 .confirm-actions{ justify-content:flex-end; margin-top:0; }
+.confirm-dontshow-row{
+  display:flex; align-items:center; gap:.5rem;
+  margin:0 0 1rem 0;
+  font-size:.8rem;
+  color:var(--color-text-muted);
+  cursor:pointer;
+  user-select:none;
+}
+.confirm-dontshow-row input{ width:15px; height:15px; flex-shrink:0; accent-color:var(--color-accent); cursor:pointer; }
 @keyframes confirmFadeIn{from{opacity:0;} to{opacity:1;}}
 @keyframes confirmPopIn{from{opacity:0; transform:scale(.94);} to{opacity:1; transform:scale(1);}}
 
@@ -1456,6 +1465,10 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
 <div class="confirm-overlay" id="confirmOverlay" hidden>
   <div class="confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="confirmMessage">
     <p id="confirmMessage"></p>
+    <label class="confirm-dontshow-row" id="confirmDontShowRow" hidden>
+      <input type="checkbox" id="confirmDontShowCheckbox">
+      <span>No volver a mostrar este mensaje</span>
+    </label>
     <div class="btn-row confirm-actions">
       <button type="button" class="btn btn-ghost" id="confirmCancelBtn">Cancelar</button>
       <button type="button" class="btn btn-danger-outline" id="confirmAcceptBtn">Sí, continuar</button>
@@ -1543,15 +1556,34 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // Ventana de confirmación propia de la app (reemplaza el confirm() nativo
   // del navegador, que se ve pequeño y desentona con el diseño).
-  function showConfirmDialog(message){
+  // dontShowAgainKey (opcional): si se pasa, el diálogo incluye el
+  // checkbox "No volver a mostrar este mensaje". Si la persona ya lo
+  // tildó una vez antes (para esa misma clave), esta función NI SIQUIERA
+  // abre la ventana — confirma directo, como si hubiera presionado
+  // "Sí, continuar" — y así se respeta su elección en los próximos usos.
+  function showConfirmDialog(message, dontShowAgainKey){
+    if (dontShowAgainKey){
+      try {
+        if (localStorage.getItem('facturas_ress_confirm_skip_' + dontShowAgainKey) === '1'){
+          return Promise.resolve(true);
+        }
+      } catch (e){ /* silencioso */ }
+    }
     return new Promise(resolve => {
       const overlay = document.getElementById('confirmOverlay');
       const acceptBtn = document.getElementById('confirmAcceptBtn');
       const cancelBtn = document.getElementById('confirmCancelBtn');
+      const dontShowRow = document.getElementById('confirmDontShowRow');
+      const dontShowCb = document.getElementById('confirmDontShowCheckbox');
       document.getElementById('confirmMessage').textContent = message;
+      dontShowCb.checked = false;
+      dontShowRow.hidden = !dontShowAgainKey;
       overlay.hidden = false;
 
       function cleanup(result){
+        if (result && dontShowAgainKey && dontShowCb.checked){
+          try { localStorage.setItem('facturas_ress_confirm_skip_' + dontShowAgainKey, '1'); } catch (e){ /* silencioso */ }
+        }
         overlay.hidden = true;
         acceptBtn.removeEventListener('click', onAccept);
         cancelBtn.removeEventListener('click', onCancel);
@@ -2141,7 +2173,13 @@ document.addEventListener('DOMContentLoaded', function(){
   // se comporta como un cierre de sesión: guarda lo que hubiera, suelta la
   // sucursal, limpia el encabezado y la pantalla, y vuelve a pedir elegir
   // sucursal — sin que nadie tenga que tocar esta PC físicamente.
-  function handleOwnDeviceRecordDeletedRemotely(skipToast){
+  // forgetLastSucursal: en false (Desconectar / cierre de sesión — el
+  // comportamiento por defecto), esta PC SIGUE recordando cuál era su
+  // sucursal, así que la próxima bienvenida le ofrece un solo botón para
+  // volver rápido a la misma, como cerrar sesión de cualquier app. En
+  // true (solo lo pasa "Restablecer"), además se olvida esa sucursal
+  // recordada, y la bienvenida vuelve a ofrecer las 3, como una PC nueva.
+  function handleOwnDeviceRecordDeletedRemotely(skipToast, forgetLastSucursal){
     // El registro de esta PC ya no existe en la nube, así que tampoco tiene
     // sentido que siga bloqueada — si lo estaba, se le quita el bloqueo y
     // la pantalla de bloqueo al instante.
@@ -2157,12 +2195,9 @@ document.addEventListener('DOMContentLoaded', function(){
     stopListeningToSucursalInvoices();
     try {
       localStorage.removeItem(SUCURSAL_KEY);
-      // También se olvida la "última sucursal usada" en esta PC: al ser un
-      // desconectado hecho por el administrador (no un cierre de sesión
-      // propio), se le vuelve a ofrecer elegir entre las 3 sucursales,
-      // igual que la primera vez que se abrió la app, en vez de quedar
-      // atada solo a la que tenía antes.
-      localStorage.removeItem(LAST_SUCURSAL_KEY);
+      if (forgetLastSucursal){
+        localStorage.removeItem(LAST_SUCURSAL_KEY);
+      }
     } catch (e){ /* silencioso */ }
     currentSucursalId = null;
     updateAdminAccessLocal();
@@ -2176,7 +2211,7 @@ document.addEventListener('DOMContentLoaded', function(){
     // "Actividad y permisos" del administrador la muestra al instante como
     // "sin sucursal aún" — no se queda pegada mostrando la sucursal vieja.
     if (fbDb) registerDevicePresence();
-    if (!skipToast) toast('🛠️ El administrador eliminó el registro de esta PC. Elija de nuevo la sucursal.', 'warn');
+    if (!skipToast) toast('🛠️ El administrador cerró la sesión de esta PC. Elija de nuevo la sucursal.', 'warn');
     openSucursalModal(true);
   }
 
@@ -2253,9 +2288,8 @@ document.addEventListener('DOMContentLoaded', function(){
           // cuanto el administrador también la desbloquee.
         } else {
           fbDb.ref('dispositivos/' + deviceId + '/resetToFirstRun').remove().catch(() => {});
-          try { localStorage.removeItem(LAST_SUCURSAL_KEY); } catch (e){ /* silencioso */ }
           toast('🛠️ El administrador restableció esta PC como dispositivo nuevo.', 'warn');
-          handleOwnDeviceRecordDeletedRemotely(true);
+          handleOwnDeviceRecordDeletedRemotely(true, true);
         }
       }
 
@@ -3140,7 +3174,7 @@ document.addEventListener('DOMContentLoaded', function(){
         : (isBlocked
             ? '¿Desconectar esa PC de su sucursal? Sigue BLOQUEADA — no va a poder volver a entrar hasta que la desbloquee. Solo se libera la sucursal para que otra PC pueda usarla. No borra sus facturas guardadas.'
             : '¿Cerrar la sesión de esa PC y desconectarla de su sucursal? Si esa PC está conectada ahora mismo, se le cierra al instante y le vuelve a pedir elegir sucursal. Si está apagada o cerrada, esto no tiene efecto hasta que la vuelvan a abrir. No borra sus facturas guardadas.');
-      const ok = await showConfirmDialog(confirmMsg);
+      const ok = await showConfirmDialog(confirmMsg, 'device_disconnect');
       if (!ok) return;
       // Si está bloqueada, NO se borra el registro entero (eso perdería
       // el "blocked: true" y la dejaría entrar de nuevo sin querer). Se
@@ -5076,7 +5110,7 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
     const sucLabel = currentSucursalId ? getSucursal(currentSucursalId).label : 'esta sucursal';
-    const ok = await showConfirmDialog('Esto borra los datos guardados de "' + sucLabel + '" EN LA NUBE — afecta a TODAS las PC que estén usando esa sucursal ahora mismo, no solo esta. No se puede deshacer. ¿Desea continuar?');
+    const ok = await showConfirmDialog('Esto borra los datos guardados de "' + sucLabel + '" EN LA NUBE — afecta a TODAS las PC que estén usando esa sucursal ahora mismo, no solo esta. No se puede deshacer. ¿Desea continuar?', 'delete_cloud_data');
     if (!ok) return;
 
     // Si la sincronización está activada pero la nube TODAVÍA no terminó
