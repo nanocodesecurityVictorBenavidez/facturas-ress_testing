@@ -4533,7 +4533,7 @@ footer.actions-footer .btn{flex:0 1 auto;}
     document.getElementById('textParsePreview').textContent = '';
     document.getElementById('inputTarjetas').value = '0';
     document.getElementById('inputCoral').value = '0';
-    document.getElementById('inputResponsable').value = '';
+    document.getElementById('inputResponsable').value = appSettings.responsableDefault || '';
     renderImageGrid();
     const headerCb = document.getElementById('headerCheckbox');
     if (headerCb){ headerCb.checked = false; headerCb.indeterminate = false; }
