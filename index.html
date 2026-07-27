@@ -1210,6 +1210,7 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
         <div class="scanner-count">Escaneadas: <span id="scannerCount">0</span></div>
       </div>
       <div class="scanner-status-sub" id="scannerSubstatus">La lectura se hace automáticamente; no necesita tomar una foto.</div>
+      <div class="scanner-status-sub" id="scannerPatternStatus" style="margin-top:.35rem;font-weight:700;color:#fbbf24;">Patrón RESS: no registrado</div>
     </div>
     <div class="scanner-last" id="scannerLast" hidden>
       <div><strong id="scannerLastRef"></strong></div>
@@ -1218,6 +1219,7 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
     </div>
     <div class="scanner-actions">
       <button type="button" class="btn btn-primary" id="btnScannerRetry">↻ Activar cámara</button>
+      <button type="button" class="btn btn-secondary" id="btnRegisterRessPattern">📐 Registrar patrón RESS</button>
       <button type="button" class="btn btn-secondary" id="btnScannerTorch">🔦 Linterna</button>
       <button type="button" class="btn btn-danger-outline" id="btnScannerStop">⏹ Detener</button>
     </div>
@@ -4341,7 +4343,7 @@ document.addEventListener('DOMContentLoaded', function(){
   let scannerLastInvoiceId = null;
   let scannerLastRef = '';
   let scannerScanCount = 0;
-  const SCANNER_INTERVAL_MS = 2200;
+  const SCANNER_INTERVAL_MS = 420;
 
   function isMobileScannerDevice(){
     return window.matchMedia('(max-width: 900px)').matches;
@@ -4378,6 +4380,33 @@ document.addEventListener('DOMContentLoaded', function(){
     if (status) status.textContent = main || '';
     if (substatus && sub != null) substatus.textContent = sub;
     if (pulse) pulse.className = 'scanner-pulse' + (kind ? ' ' + kind : '');
+  }
+
+  let scannerWorkerPromise = null;
+
+  async function ensureScannerWorker(){
+    if (scannerWorker) return scannerWorker;
+    if (scannerWorkerPromise) return scannerWorkerPromise;
+
+    scannerWorkerPromise = (async () => {
+      if (typeof Tesseract === 'undefined') throw new Error('Tesseract no disponible');
+      // Solo español: las etiquetas de la factura RESS están en español y
+      // cargar un único idioma reduce bastante el tiempo inicial en móvil.
+      const worker = await Tesseract.createWorker('spa', 1);
+      await worker.setParameters({
+        tessedit_pageseg_mode: '6',
+        preserve_interword_spaces: '1',
+        user_defined_dpi: '150'
+      });
+      scannerWorker = worker;
+      return worker;
+    })();
+
+    try {
+      return await scannerWorkerPromise;
+    } finally {
+      scannerWorkerPromise = null;
+    }
   }
 
   function scannerBeep(ok){
@@ -4515,24 +4544,254 @@ document.addEventListener('DOMContentLoaded', function(){
   function captureScannerFrame(){
     const video=document.getElementById('scannerVideo'), canvas=document.getElementById('scannerCanvas');
     if (!video.videoWidth || !video.videoHeight) return null;
-    const vw=video.videoWidth,vh=video.videoHeight,cropW=Math.round(vw*0.72),cropH=Math.round(vh*0.88),sx=Math.max(0,Math.round((vw-cropW)/2)),sy=Math.max(0,Math.round((vh-cropH)/2));
-    canvas.width=Math.min(1500,cropW); canvas.height=Math.round(canvas.width*(cropH/cropW));
-    const ctx=canvas.getContext('2d',{willReadFrequently:true}); ctx.drawImage(video,sx,sy,cropW,cropH,0,0,canvas.width,canvas.height);
-    const im=ctx.getImageData(0,0,canvas.width,canvas.height),a=im.data; for(let i=0;i<a.length;i+=4){const g=.299*a[i]+.587*a[i+1]+.114*a[i+2],v=Math.max(0,Math.min(255,(g-128)*1.35+128));a[i]=a[i+1]=a[i+2]=v;} ctx.putImageData(im,0,0); return canvas;
+
+    const vw=video.videoWidth, vh=video.videoHeight;
+    // La factura es angosta: recortamos el centro para no enviar al OCR
+    // paredes/mesa/fondo que solo hacen el reconocimiento más lento.
+    const cropW=Math.round(vw*0.68);
+    const cropH=Math.round(vh*0.90);
+    const sx=Math.max(0,Math.round((vw-cropW)/2));
+    const sy=Math.max(0,Math.round((vh-cropH)/2));
+
+    // Antes podía llegar a ~1500 px de ancho. Para Tesseract en móvil,
+    // ~760 px suele ser suficiente para ticket térmico y es mucho más rápido.
+    const targetW=Math.min(760,cropW);
+    canvas.width=targetW;
+    canvas.height=Math.max(1,Math.round(targetW*(cropH/cropW)));
+
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(video,sx,sy,cropW,cropH,0,0,canvas.width,canvas.height);
+
+    // Escala de grises + contraste ligero. Sin filtros costosos adicionales.
+    const im=ctx.getImageData(0,0,canvas.width,canvas.height), a=im.data;
+    for(let i=0;i<a.length;i+=4){
+      const g=.299*a[i]+.587*a[i+1]+.114*a[i+2];
+      const v=g<70?0:(g>210?255:Math.max(0,Math.min(255,(g-128)*1.22+128)));
+      a[i]=a[i+1]=a[i+2]=v;
+    }
+    ctx.putImageData(im,0,0);
+    return canvas;
+  }
+
+  const RESS_PATTERN_KEY = 'facturas_ress_scanner_pattern_v1';
+  let ressPattern = null;
+  let scannerPatternRegistering = false;
+
+  function updateRessPatternStatus(){
+    const el=document.getElementById('scannerPatternStatus');
+    if(!el) return;
+    if(ressPattern && ressPattern.valid){
+      const date=ressPattern.savedAt ? new Date(ressPattern.savedAt).toLocaleDateString() : '';
+      el.textContent='✓ Patrón RESS registrado' + (date ? ' · '+date : '');
+      el.style.color='#86efac';
+    }else{
+      el.textContent='Patrón RESS: no registrado';
+      el.style.color='#fbbf24';
+    }
+  }
+
+  function loadRessPattern(){
+    try{
+      const raw=localStorage.getItem(RESS_PATTERN_KEY);
+      ressPattern=raw ? JSON.parse(raw) : null;
+    }catch(e){ ressPattern=null; }
+    updateRessPatternStatus();
+  }
+
+  function saveRessPattern(data){
+    ressPattern=data;
+    try{ localStorage.setItem(RESS_PATTERN_KEY,JSON.stringify(data)); }catch(e){}
+    updateRessPatternStatus();
+  }
+
+  function normalizeRessPatternText(t){
+    return String(t||'').toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/\s+/g,' ');
+  }
+
+  function evaluateRessPatternText(t){
+    const s=normalizeRessPatternText(t);
+    const anchors=[
+      /FACTURA\s*(?:NO|N[°ºO]?)/,
+      /\bCA\s*:/,
+      /EMISION/,
+      /DESCRIPCION/,
+      /VALOR\s+A\s+PAGAR/,
+      /(?:EFECTIVO|TARJETA\s+DE\s+(?:CREDITO|DEBITO)|CREDITO\s+CORAL)/
+    ];
+    const hits=anchors.map(rx=>rx.test(s));
+    return {hits:hits.filter(Boolean).length,total:anchors.length,hitsMap:hits};
+  }
+
+  async function registerRessPattern(){
+    if(scannerPatternRegistering) return;
+    if(!scannerActive){
+      toast('Primero active la cámara.', 'warn');
+      return;
+    }
+    scannerPatternRegistering=true;
+    const btn=document.getElementById('btnRegisterRessPattern');
+    if(btn) btn.disabled=true;
+
+    try{
+      setScannerStatus(
+        'Registrando patrón RESS…',
+        'Coloque una factura RESS completa dentro del marco. La app aprenderá sus etiquetas y estructura fija.',
+        ''
+      );
+
+      const canvas=await captureBestMovingFrame();
+      if(!canvas) throw new Error('Sin imagen');
+
+      const worker=await ensureScannerWorker();
+      const result=await worker.recognize(canvas);
+      const raw=result.data&&result.data.text?result.data.text:'';
+      const check=evaluateRessPatternText(raw);
+
+      if(check.hits < 4){
+        setScannerStatus(
+          'Patrón no reconocido',
+          'Acerque un poco la factura y vuelva a intentar. Deben verse FACTURA, CA, DESCRIPCIÓN y VALOR A PAGAR.',
+          'warn'
+        );
+        toast('No se registró el patrón: se reconocieron '+check.hits+' de '+check.total+' zonas fijas.', 'warn');
+        return;
+      }
+
+      const thumb=document.createElement('canvas');
+      const tw=220;
+      thumb.width=tw;
+      thumb.height=Math.max(1,Math.round(tw*(canvas.height/canvas.width)));
+      thumb.getContext('2d').drawImage(canvas,0,0,thumb.width,thumb.height);
+
+      saveRessPattern({
+        valid:true,
+        savedAt:new Date().toISOString(),
+        anchors:check.hitsMap,
+        anchorCount:check.hits,
+        reference:thumb.toDataURL('image/jpeg',0.50)
+      });
+
+      setScannerStatus(
+        '✓ Patrón RESS aprendido',
+        'Ya puede pasar las facturas. Antes de agregarlas, la app comprobará que tengan el formato aprendido.',
+        'ok'
+      );
+      toast('Patrón RESS registrado correctamente.', 'ok');
+    }catch(err){
+      console.error(err);
+      setScannerStatus('No se pudo registrar el patrón','Vuelva a intentarlo con la factura completa dentro del marco.','err');
+    }finally{
+      scannerPatternRegistering=false;
+      if(btn) btn.disabled=false;
+    }
+  }
+
+  function isLikelyRessByLearnedPattern(rawText){
+    if(!ressPattern || !ressPattern.valid) return true;
+    const check=evaluateRessPatternText(rawText);
+    return check.hits >= 3;
+  }
+
+  function cloneScannerCanvas(source){
+    const c=document.createElement('canvas');
+    c.width=source.width;
+    c.height=source.height;
+    c.getContext('2d',{willReadFrequently:true}).drawImage(source,0,0);
+    return c;
+  }
+
+  function scannerSharpnessScore(canvas){
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    const w=canvas.width,h=canvas.height;
+    if(w<20||h<20) return 0;
+    const img=ctx.getImageData(0,0,w,h).data;
+    const step=Math.max(2,Math.floor(w/220));
+    let score=0,count=0;
+    for(let y=step;y<h-step;y+=step){
+      for(let x=step;x<w-step;x+=step){
+        const p=(y*w+x)*4;
+        const px=(y*w+(x+step))*4;
+        const py=((y+step)*w+x)*4;
+        score+=Math.abs(img[p]-img[px])+Math.abs(img[p]-img[py]);
+        count+=2;
+      }
+    }
+    return count ? score/count : 0;
+  }
+
+  function scannerWait(ms){
+    return new Promise(resolve=>setTimeout(resolve,ms));
+  }
+
+  async function captureBestMovingFrame(){
+    const frames=[];
+    for(let i=0;i<3;i++){
+      const live=captureScannerFrame();
+      if(live) frames.push(cloneScannerCanvas(live));
+      if(i<2) await scannerWait(70);
+    }
+    if(!frames.length) return null;
+
+    let best=frames[0];
+    let bestScore=scannerSharpnessScore(best);
+    for(let i=1;i<frames.length;i++){
+      const score=scannerSharpnessScore(frames[i]);
+      if(score>bestScore){
+        best=frames[i];
+        bestScore=score;
+      }
+    }
+    return best;
   }
 
   async function scannerTick(){
-    if (!scannerActive || scannerBusy) return; scannerBusy=true;
+    if (!scannerActive || scannerBusy) return;
+    scannerBusy=true;
     try{
-      const canvas=captureScannerFrame(); if(!canvas) return;
-      setScannerStatus('Leyendo factura…','Mantenga la factura quieta dentro del marco.','');
-      if(!scannerWorker){ if(typeof Tesseract==='undefined') throw new Error('Tesseract no disponible'); setScannerStatus('Cargando reconocimiento…','La primera lectura puede tardar unos segundos.',''); scannerWorker=await Tesseract.createWorker('spa+eng',1); await scannerWorker.setParameters({tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'}); }
-      const result=await scannerWorker.recognize(canvas); const d=parseRessReceipt(result.data&&result.data.text?result.data.text:'');
-      if(!d){ setScannerStatus('Buscando factura…','Acerque el recibo y evite reflejos o movimiento.',''); return; }
-      if(d.referencia===scannerLastRef){ setScannerStatus('Factura ya leída','Retire esta factura y coloque la siguiente.','ok'); return; }
+      // Captura una ráfaga muy corta y elige automáticamente el fotograma
+      // más nítido. Así puede pasar la factura por la cámara sin detenerla.
+      const canvas=await captureBestMovingFrame();
+      if(!canvas) return;
+
+      setScannerStatus('Leyendo en movimiento…','Siga pasando la factura por el marco. No necesita detenerla.','');
+
+      if(!scannerWorker){
+        setScannerStatus('Preparando reconocimiento…','Solo ocurre al abrir el escáner por primera vez.','');
+      }
+
+      const worker=await ensureScannerWorker();
+      const result=await worker.recognize(canvas);
+      const rawText=result.data&&result.data.text?result.data.text:'';
+
+      if(!isLikelyRessByLearnedPattern(rawText)){
+        setScannerStatus(
+          'Buscando patrón RESS…',
+          'La imagen todavía no coincide con el formato aprendido. Siga pasando la factura por el marco.',
+          ''
+        );
+        return;
+      }
+
+      const d=parseRessReceipt(rawText);
+
+      if(!d){
+        setScannerStatus('Escaneo continuo activo…','Siga pasando la factura por el marco; la cámara continuará intentando automáticamente.','');
+        return;
+      }
+
+      if(d.referencia===scannerLastRef){
+        setScannerStatus('Factura ya leída','Pase la siguiente factura por el marco.','ok');
+        return;
+      }
+
       addScannedReceipt(d);
-    }catch(err){ setScannerStatus('No se pudo leer','Revise el permiso de cámara y la conexión para cargar OCR.','err'); }
-    finally{ scannerBusy=false; }
+    }catch(err){
+      setScannerStatus('No se pudo leer','La cámara seguirá activa. Acerque la factura al marco y continúe pasando el recibo.','err');
+    }finally{
+      scannerBusy=false;
+    }
   }
 
   async function startMobileScanner(){
@@ -4544,6 +4803,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const modal = document.getElementById('scannerModal');
     const video = document.getElementById('scannerVideo');
     modal.hidden = false;
+    updateRessPatternStatus();
     scannerScanCount = 0;
     document.getElementById('scannerCount').textContent = '0';
     document.getElementById('scannerLast').hidden = true;
@@ -4573,6 +4833,10 @@ document.addEventListener('DOMContentLoaded', function(){
     }
 
     setScannerStatus('Solicitando cámara…', 'Pulse Permitir cuando el navegador solicite acceso.', '');
+
+    // Empieza a cargar OCR al mismo tiempo que el usuario concede la cámara.
+    // Así, al aparecer la vista previa, gran parte de la espera inicial ya pasó.
+    ensureScannerWorker().catch(() => { /* scannerTick mostrará el error si hace falta */ });
 
     try{
       let stream = null;
@@ -4637,7 +4901,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
       scannerActive = true;
       scannerLastRef = '';
-      setScannerStatus('Buscando factura…', 'Coloque una factura RESS dentro del marco y manténgala quieta.', '');
+      setScannerStatus('Escaneo continuo activo…', 'Pase la factura por el marco; no necesita detenerla. La app elegirá automáticamente el fotograma más nítido.', '');
       if (scannerTimer) clearInterval(scannerTimer);
       scannerTimer = setInterval(scannerTick, SCANNER_INTERVAL_MS);
       setTimeout(scannerTick, 350);
@@ -4658,8 +4922,10 @@ document.addEventListener('DOMContentLoaded', function(){
     scannerActive=false; if(scannerTimer){clearInterval(scannerTimer);scannerTimer=null;} if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null;} const video=document.getElementById('scannerVideo'); if(video)video.srcObject=null; scannerTorchOn=false; document.getElementById('btnScannerTorch').textContent='🔦 Linterna'; if(closeModal)document.getElementById('scannerModal').hidden=true; setScannerStatus('Escáner detenido','Puede volver a iniciarlo desde 📷 Escanear.','err');
   }
 
+  loadRessPattern();
   document.getElementById('btnOpenScanner').addEventListener('click',startMobileScanner);
   document.getElementById('btnScannerRetry').addEventListener('click',startMobileScanner);
+  document.getElementById('btnRegisterRessPattern').addEventListener('click',registerRessPattern);
   document.getElementById('scannerModalClose').addEventListener('click',()=>stopMobileScanner(true));
   document.getElementById('btnScannerStop').addEventListener('click',()=>stopMobileScanner(false));
   document.getElementById('btnScannerViewLast').addEventListener('click',()=>{const inv=state.invoices.find(i=>i.id===scannerLastInvoiceId);if(inv)showInvoiceDetail(inv);});
