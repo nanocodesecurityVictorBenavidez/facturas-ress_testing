@@ -680,6 +680,7 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
   cursor:pointer;
   user-select:none;
 }
+.confirm-dontshow-row[hidden]{ display:none; }
 .confirm-dontshow-row input{ width:15px; height:15px; flex-shrink:0; accent-color:var(--color-accent); cursor:pointer; }
 @keyframes confirmFadeIn{from{opacity:0;} to{opacity:1;}}
 @keyframes confirmPopIn{from{opacity:0; transform:scale(.94);} to{opacity:1; transform:scale(1);}}
@@ -1023,6 +1024,57 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
   .print-cierre-table{ border-right:2px solid #000; }
 }
 
+
+
+/* ======================================================================
+   ESCÁNER MÓVIL RESS — cámara continua (solo visible en móvil)
+   ====================================================================== */
+.mobile-only{ display:none !important; }
+@media (max-width: 900px){
+  .mobile-only{ display:inline-flex !important; }
+  #scannerModal{
+    position:fixed; inset:0; width:100vw; height:100dvh; max-height:none;
+    border-radius:0; top:0; left:0; right:0; bottom:0; transform:none;
+    z-index:500; background:#0b1118;
+  }
+  #scannerModal .floating-modal-header{ cursor:default; }
+  #scannerModal .floating-modal-body{ padding:0; overflow:auto; background:#0b1118; color:#fff; }
+}
+.scanner-stage{ position:relative; width:100%; background:#05080c; min-height:54vh; overflow:hidden; }
+#scannerVideo{ width:100%; height:54vh; object-fit:cover; display:block; background:#000; }
+.scanner-guide{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(78vw,430px); aspect-ratio:0.58; max-height:48vh; border:3px solid rgba(255,255,255,.92); border-radius:14px; box-shadow:0 0 0 9999px rgba(0,0,0,.34); pointer-events:none; }
+.scanner-guide::before{ content:'Alinee la factura dentro del marco'; position:absolute; left:50%; top:-2.2rem; transform:translateX(-50%); white-space:nowrap; font-size:.78rem; font-weight:700; color:#fff; text-shadow:0 1px 4px #000; }
+.scanner-status-card{ margin:.8rem; padding:.85rem 1rem; border-radius:12px; background:#14202c; border:1px solid rgba(255,255,255,.14); }
+.scanner-status-line{ display:flex; align-items:center; justify-content:space-between; gap:.8rem; }
+.scanner-status-main{ font-weight:800; font-size:1rem; }
+.scanner-status-sub{ opacity:.82; font-size:.82rem; margin-top:.25rem; }
+.scanner-count{ font-weight:800; font-variant-numeric:tabular-nums; }
+.scanner-last{ margin:.7rem .8rem 1rem; padding:.85rem 1rem; border-radius:12px; background:#fff; color:#1f2937; }
+.scanner-last[hidden]{ display:none; }
+.scanner-last strong{ color:#14283f; }
+.scanner-actions{ display:flex; gap:.6rem; padding:0 .8rem 1rem; }
+.scanner-actions .btn{ flex:1; }
+.scanner-pulse{ display:inline-block; width:10px; height:10px; border-radius:50%; background:#f59e0b; margin-right:.45rem; animation:scannerPulse 1s infinite; }
+.scanner-pulse.ok{ background:#22c55e; animation:none; }
+.scanner-pulse.err{ background:#ef4444; animation:none; }
+@keyframes scannerPulse{50%{opacity:.25}}
+#invoiceDetailModal{ width:min(560px,94vw); max-height:min(86vh,760px); }
+.detail-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; margin-bottom:.8rem; }
+.detail-item{ background:var(--color-secondary-bg); border-radius:8px; padding:.55rem .65rem; }
+.detail-item .k{ display:block; font-size:.7rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:700; }
+.detail-item .v{ display:block; font-weight:700; margin-top:.12rem; overflow-wrap:anywhere; }
+.detail-products{ width:100%; min-width:0; font-size:.78rem; border-collapse:collapse; }
+.detail-products th,.detail-products td{ border-bottom:1px solid var(--color-border); padding:.4rem .3rem; }
+.detail-products th{ position:static; background:var(--color-primary); color:#fff; cursor:default; }
+.detail-products td.num{ text-align:right; font-variant-numeric:tabular-nums; }
+.detail-total{ display:flex; justify-content:space-between; gap:1rem; font-weight:800; font-size:1.05rem; padding:.7rem 0 0; }
+.detail-raw{ margin-top:.8rem; }
+.detail-raw summary{ cursor:pointer; font-weight:700; color:var(--color-heading); }
+.detail-raw pre{ white-space:pre-wrap; word-break:break-word; background:var(--color-secondary-bg); padding:.7rem; border-radius:8px; font-size:.72rem; max-height:220px; overflow:auto; }
+.row-view-btn{ background:none; border:1px solid var(--color-border); color:var(--color-heading); border-radius:6px; cursor:pointer; padding:.25rem .45rem; }
+.row-view-btn:hover{ background:var(--color-secondary-bg); }
+@media (max-width:520px){ .detail-grid{ grid-template-columns:1fr; } }
+
 </style>
 </head>
 <body>
@@ -1056,6 +1108,7 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
     </h1>
   </div>
   <div class="header-actions">
+    <button type="button" class="btn btn-primary mobile-only" id="btnOpenScanner" aria-label="Abrir escáner móvil de facturas">📷 Escanear</button>
     <button type="button" class="btn btn-secondary" id="btnOpenUpload" aria-label="Abrir ventana para cargar facturas">📥 Cargar facturas</button>
     <button type="button" class="btn btn-secondary" id="btnOpenSummary" aria-label="Abrir ventana de resumen de resultados">📊 Resumen de resultados</button>
     <button type="button" class="btn btn-secondary" id="btnOpenBranches" aria-label="Ver todas las sucursales en tiempo real">🏢 Sucursales</button>
@@ -1122,6 +1175,7 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
             <th data-sort="cliente">Cliente</th>
             <th data-sort="origen">Origen</th>
             <th data-sort="estado">Estado</th>
+            <th>Detalle</th>
             <th>Acciones</th>
           </tr>
         </thead>
@@ -1136,6 +1190,48 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
   </section>
 
 </main>
+
+
+<!-- ============ ESCÁNER MÓVIL CONTINUO ============ -->
+<div class="floating-modal" id="scannerModal" hidden aria-label="Escáner móvil de facturas RESS" role="dialog" aria-modal="true">
+  <div class="floating-modal-header">
+    <span>📷 Escáner RESS</span>
+    <button type="button" class="floating-modal-close" id="scannerModalClose" aria-label="Cerrar escáner">✕</button>
+  </div>
+  <div class="floating-modal-body">
+    <div class="scanner-stage">
+      <video id="scannerVideo" playsinline webkit-playsinline autoplay muted></video>
+      <canvas id="scannerCanvas" hidden></canvas>
+      <div class="scanner-guide" aria-hidden="true"></div>
+    </div>
+    <div class="scanner-status-card" aria-live="polite">
+      <div class="scanner-status-line">
+        <div><span class="scanner-pulse" id="scannerPulse"></span><span class="scanner-status-main" id="scannerStatus">Preparando cámara…</span></div>
+        <div class="scanner-count">Escaneadas: <span id="scannerCount">0</span></div>
+      </div>
+      <div class="scanner-status-sub" id="scannerSubstatus">La lectura se hace automáticamente; no necesita tomar una foto.</div>
+    </div>
+    <div class="scanner-last" id="scannerLast" hidden>
+      <div><strong id="scannerLastRef"></strong></div>
+      <div id="scannerLastInfo" class="muted"></div>
+      <button type="button" class="btn btn-secondary btn-sm" id="btnScannerViewLast" style="margin-top:.55rem;">👁 Ver detalle</button>
+    </div>
+    <div class="scanner-actions">
+      <button type="button" class="btn btn-primary" id="btnScannerRetry">↻ Activar cámara</button>
+      <button type="button" class="btn btn-secondary" id="btnScannerTorch">🔦 Linterna</button>
+      <button type="button" class="btn btn-danger-outline" id="btnScannerStop">⏹ Detener</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DETALLE COMPLETO DE FACTURA ============ -->
+<div class="floating-modal" id="invoiceDetailModal" hidden aria-label="Detalle de factura" role="dialog">
+  <div class="floating-modal-header" id="invoiceDetailModalHeader">
+    <span>🧾 Detalle de factura</span>
+    <button type="button" class="floating-modal-close" id="invoiceDetailModalClose" aria-label="Cerrar detalle">✕</button>
+  </div>
+  <div class="floating-modal-body" id="invoiceDetailBody"></div>
+</div>
 
 <!-- ============ VENTANA EMERGENTE: VISTA PREVIA DE IMAGEN ============ -->
 <div class="floating-modal" id="uploadModal" hidden aria-label="Cargar facturas" role="dialog">
@@ -1299,6 +1395,12 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
       <button type="button" class="btn btn-danger-outline btn-sm" id="btnResetSettings">↺ Restaurar ajustes originales</button>
     </div>
 
+    <div class="settings-section">
+      <h3>Mensajes de confirmación</h3>
+      <p class="muted settings-hint">Si marcó "No volver a mostrar" en algún mensaje y quiere que vuelva a aparecer, use este botón.</p>
+      <button type="button" class="btn btn-secondary btn-sm" id="btnResetConfirmSkips">🔔 Reactivar todos los mensajes de confirmación</button>
+    </div>
+
     <div class="btn-row" style="justify-content:flex-end;">
       <button type="button" class="btn btn-primary" id="btnSaveSettings">Guardar cambios</button>
     </div>
@@ -1379,6 +1481,7 @@ html.fr-welcome #sucursalOverlay{ display:flex !important; }
       <p class="muted settings-hint">Quita cualquier cambio hecho aquí y vuelve a los datos de fábrica incluidos en la app.</p>
       <button type="button" class="btn btn-danger-outline btn-sm" id="btnResetAdminPanel">↺ Restaurar a los datos de fábrica</button>
     </div>
+
 
     <div class="btn-row" style="justify-content:flex-end;">
       <button type="button" class="btn btn-primary" id="btnSaveAdminPanel">Guardar cambios</button>
@@ -1538,7 +1641,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // Modelo de una factura:
   // { id, num, fecha, centro, referencia, transaccion, valor, cliente,
-  //   origen, estado, dudoso, duplicada, incluirEnTotal, selected, errores:[] }
+  //   origen, estado, dudoso, duplicada, incluirEnTotal, selected, errores:[], detalleEscaneo? }
 
   let nextRowNum = 1;
   let insCounter = 0; // secuencia de inserción, independiente del número mostrado (N.º)
@@ -1604,6 +1707,25 @@ document.addEventListener('DOMContentLoaded', function(){
       document.addEventListener('keydown', onKeydown);
       acceptBtn.focus();
     });
+  }
+
+  // Borra SOLO las preferencias de "No volver a mostrar este mensaje" de
+  // todos los diálogos de confirmación (cada botón guarda la suya aparte,
+  // con su propio prefijo 'facturas_ress_confirm_skip_'), sin tocar nada
+  // más (sucursal, facturas, ajustes, etc.). Así, si alguna se marcó sin
+  // querer, esta es la forma de que ese mensaje vuelva a aparecer, sin
+  // tener que borrar todos los datos de esta PC.
+  function resetAllConfirmSkips(){
+    let count = 0;
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++){
+        const k = localStorage.key(i);
+        if (k && k.indexOf('facturas_ress_confirm_skip_') === 0) keysToRemove.push(k);
+      }
+      keysToRemove.forEach(k => { localStorage.removeItem(k); count++; });
+    } catch (e){ /* silencioso */ }
+    return count;
   }
 
   /* ------------------------------------------------------------------
@@ -1971,7 +2093,7 @@ document.addEventListener('DOMContentLoaded', function(){
     cbs.forEach(cb => { try { cb(); } catch (e){ /* silencioso */ } });
   }
 
-  function connectFirebase(){
+  function connectFirebase(onDbReady){
     fbDb = null;
     fbAuthReady = false;
     pendingAuthReadyCallbacks = [];
@@ -1986,58 +2108,87 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     try {
       const cfg = { apiKey, databaseURL, projectId };
-      if (firebase.apps && firebase.apps.length){
-        firebase.app().delete().catch(() => {});
-      }
-      firebase.initializeApp(cfg);
-      fbDb = firebase.database();
 
-      // Inicia sesión anónima (sin pedir contraseña a nadie). Esto es lo
-      // que permite usar reglas de seguridad permanentes del tipo
-      // "auth != null" en vez del modo de prueba de Firebase, que se
-      // bloquea solo a los 30 días.
-      if (firebase.auth){
-        setCloudStatus('🔄 Conectando...', '');
-        firebase.auth().signInAnonymously()
-          .then(() => {
-            setCloudStatus('✅ Conectado al proyecto de Firebase.', 'ok');
-            startRealtimeConnectionMonitor();
-            registerDevicePresence();
-            listenToOwnDevice();
-            flushAuthReadyCallbacks();
-            // Conecta el listener de facturas de la sucursal actual (si
-            // ya había una guardada de antes, como al recargar la
-            // página). Si el usuario recién está eligiendo sucursal en
-            // este momento, switchSucursalProfile lo hace por su cuenta.
-            if (currentSucursalId) listenToSucursalInvoices(currentSucursalId);
-            // Solo actualiza los números en pantalla (por si Tarjetas/
-            // Coral se escribieron justo mientras se esperaba la
-            // autenticación) — NO debe disparar un guardado real acá:
-            // en este punto todavía no se sabe con certeza si el
-            // respaldo local ya se restauró (eso pasa más abajo en el
-            // arranque) ni si ya llegó el primer dato real de la nube
-            // para esta sucursal. Sin este freno, si el respaldo local
-            // de esta PC estuviera vacío por algún motivo, se llegaba a
-            // enviar una tabla vacía a la nube y borrar los datos reales
-            // compartidos con las demás PC, justo al recargar la página.
-            skipNextCloudPush = true;
-            skipNextLocalSync = true;
-            if (currentSucursalId) renderSummary();
-          })
-          .catch(() => setCloudStatus('⚠️ Conectado, pero no se pudo autenticar. Active "Anónimo" en Firebase → Authentication → Sign-in method.', 'err'));
-      } else {
-        setCloudStatus('✅ Conectado al proyecto de Firebase.', 'ok');
-        startRealtimeConnectionMonitor();
-        registerDevicePresence();
-        listenToOwnDevice();
-        flushAuthReadyCallbacks();
-        if (currentSucursalId) listenToSucursalInvoices(currentSucursalId);
-        // Mismo freno que en la rama de arriba: solo refresca pantalla,
-        // no dispara un guardado real todavía.
-        skipNextCloudPush = true;
-        skipNextLocalSync = true;
-        if (currentSucursalId) renderSummary();
-      }
+      // Si ya había una app de Firebase inicializada (por ejemplo, se
+      // guarda la configuración del panel sin recargar la página antes),
+      // hay que ESPERAR a que termine de borrarse antes de crear la app
+      // nueva. Antes esto se disparaba en paralelo, sin esperar
+      // (firebase.app().delete() es asíncrono): la app nueva se creaba y
+      // pedía el login anónimo mientras la vieja todavía se estaba
+      // cerrando por debajo, y ese choque hacía fallar la autenticación
+      // justo después de "Guardar cambios" (aunque los datos estuvieran
+      // bien). Al recargar la página no había ninguna app previa que
+      // borrar, por eso ahí sí funcionaba siempre a la primera.
+      const reinit = (firebase.apps && firebase.apps.length)
+        ? firebase.app().delete().catch(() => {})
+        : Promise.resolve();
+
+      setCloudStatus('🔄 Conectando...', '');
+
+      reinit.then(() => {
+        firebase.initializeApp(cfg);
+        fbDb = firebase.database();
+
+        // Avisa a quien llamó a connectFirebase (por ejemplo, "Guardar
+        // cambios" en el panel de administrador) que fbDb ya existe, para
+        // que recién ahí arranque cosas como la lista de PC en vivo. Antes,
+        // "Guardar cambios" llamaba a startDevicesListListener() apenas
+        // connectFirebase() retornaba (de forma síncrona), pero en ese
+        // instante fbDb todavía era null porque la reconexión de arriba es
+        // asíncrona — por eso aparecía un instante el aviso "Active primero
+        // la sincronización..." hasta que se actualizaba manualmente.
+        if (typeof onDbReady === 'function'){ try { onDbReady(); } catch (e){ /* silencioso */ } }
+
+        // Inicia sesión anónima (sin pedir contraseña a nadie). Esto es lo
+        // que permite usar reglas de seguridad permanentes del tipo
+        // "auth != null" en vez del modo de prueba de Firebase, que se
+        // bloquea solo a los 30 días.
+        if (firebase.auth){
+          firebase.auth().signInAnonymously()
+            .then(() => {
+              setCloudStatus('✅ Conectado al proyecto de Firebase.', 'ok');
+              startRealtimeConnectionMonitor();
+              registerDevicePresence();
+              listenToOwnDevice();
+              flushAuthReadyCallbacks();
+              // Conecta el listener de facturas de la sucursal actual (si
+              // ya había una guardada de antes, como al recargar la
+              // página). Si el usuario recién está eligiendo sucursal en
+              // este momento, switchSucursalProfile lo hace por su cuenta.
+              if (currentSucursalId) listenToSucursalInvoices(currentSucursalId);
+              // Solo actualiza los números en pantalla (por si Tarjetas/
+              // Coral se escribieron justo mientras se esperaba la
+              // autenticación) — NO debe disparar un guardado real acá:
+              // en este punto todavía no se sabe con certeza si el
+              // respaldo local ya se restauró (eso pasa más abajo en el
+              // arranque) ni si ya llegó el primer dato real de la nube
+              // para esta sucursal. Sin este freno, si el respaldo local
+              // de esta PC estuviera vacío por algún motivo, se llegaba a
+              // enviar una tabla vacía a la nube y borrar los datos reales
+              // compartidos con las demás PC, justo al recargar la página.
+              skipNextCloudPush = true;
+              skipNextLocalSync = true;
+              if (currentSucursalId) renderSummary();
+            })
+            .catch(() => setCloudStatus('⚠️ Conectado, pero no se pudo autenticar. Active "Anónimo" en Firebase → Authentication → Sign-in method.', 'err'));
+        } else {
+          setCloudStatus('✅ Conectado al proyecto de Firebase.', 'ok');
+          startRealtimeConnectionMonitor();
+          registerDevicePresence();
+          listenToOwnDevice();
+          flushAuthReadyCallbacks();
+          if (currentSucursalId) listenToSucursalInvoices(currentSucursalId);
+          // Mismo freno que en la rama de arriba: solo refresca pantalla,
+          // no dispara un guardado real todavía.
+          skipNextCloudPush = true;
+          skipNextLocalSync = true;
+          if (currentSucursalId) renderSummary();
+        }
+      }).catch(() => {
+        fbDb = null;
+        setCloudStatus('⚠️ No se pudo conectar. Revise los datos ingresados.', 'err');
+      });
+
       return true;
     } catch (err){
       fbDb = null;
@@ -2109,16 +2260,30 @@ document.addEventListener('DOMContentLoaded', function(){
     if (!fbDb || !deviceId) return;
     const ref = fbDb.ref('dispositivos/' + deviceId);
     const writePresence = (extra) => {
-      const s = currentSucursalId ? getSucursal(currentSucursalId) : null;
       const info = getDeviceInfo();
-      ref.update(Object.assign({
-        sucursalId: currentSucursalId || null,
-        sucursalLabel: s ? s.label : null,
+      const payload = {
         deviceLabel: info.label,
         deviceIcon: info.icon,
         lastSeen: firebase.database.ServerValue.TIMESTAMP,
         online: true
-      }, extra || {})).then(() => { deviceHasRegisteredOnce = true; }).catch(() => {});
+      };
+      // Mientras esta PC está bloqueada, NO se reenvía la sucursal que
+      // tiene guardada localmente: si el administrador la desconectó de
+      // su sucursal desde "Actividad y permisos" (botón Desconectar) para
+      // liberarla mientras seguía bloqueada, ese cambio vive solo en la
+      // nube (esta PC bloqueada no puede enterarse ni actualizar su propio
+      // localStorage). Si se manda igual el sucursalId de acá, se pisa el
+      // "null" que dejó el administrador apenas esta PC vuelve a
+      // registrarse (por ejemplo, al recargar la página todavía
+      // bloqueada) — y entonces, al desbloquearla, ya no detecta que debe
+      // pedir elegir sucursal de nuevo y entra directo a la pantalla de
+      // facturas con la sucursal vieja.
+      if (!deviceBlocked){
+        const s = currentSucursalId ? getSucursal(currentSucursalId) : null;
+        payload.sucursalId = currentSucursalId || null;
+        payload.sucursalLabel = s ? s.label : null;
+      }
+      ref.update(Object.assign(payload, extra || {})).then(() => { deviceHasRegisteredOnce = true; }).catch(() => {});
     };
     writePresence();
     try {
@@ -2247,7 +2412,17 @@ document.addEventListener('DOMContentLoaded', function(){
         } else {
           toast('✅ El administrador reactivó esta PC.', 'ok');
           applyBlockedUI(false);
-          if (currentSucursalId && !data.sucursalId){
+          if (data.resetToFirstRun){
+            // Hay un "Restablecer" pendiente de cuando estaba bloqueada:
+            // se deja pasar de largo acá (sin tocar currentSucursalId
+            // todavía) para que sea el bloque de "resetToFirstRun" de más
+            // abajo el que se encargue de TODO el reseteo de una sola vez
+            // (olvidar también la última sucursal recordada y ofrecer las
+            // 3 de nuevo). Si esto se adelantara a poner currentSucursalId
+            // en null acá, el bloque de abajo lo encontraría ya vacío y no
+            // haría nada — quedando a mitad de camino, como un simple
+            // "Desconectar" en vez de un restablecimiento completo.
+          } else if (currentSucursalId && !data.sucursalId){
             // Mientras estaba bloqueada, el administrador la desconectó de
             // su sucursal (quedó libre para otra PC) — hay que pedirle que
             // elija de nuevo, en vez de seguir usando una sucursal que ya
@@ -2276,6 +2451,12 @@ document.addEventListener('DOMContentLoaded', function(){
           toast(hasAdminAccess
             ? '✅ El administrador le dio acceso al panel de administrador en esta PC (Ctrl+,).'
             : '🔒 El administrador le quitó el acceso al panel de administrador en esta PC.', 'ok');
+          if (!hasAdminAccess){
+            // Si el panel de administrador está abierto en este momento en
+            // esta PC, hay que cerrarlo de inmediato: quitar el permiso no
+            // debe dejarlo usable hasta que la persona lo vuelva a abrir.
+            closeAdminPanelModal();
+          }
         }
       }
 
@@ -2364,7 +2545,7 @@ document.addEventListener('DOMContentLoaded', function(){
         tarjetas: forceDefaultResumen ? 0 : totals.tarjetas,
         coral: forceDefaultResumen ? 0 : totals.coral,
         totalFacturas: totals.totalFacturas,
-        responsable: forceDefaultResumen ? (appSettings.responsableDefault || 'Invitado') : (inputResp ? inputResp.value : ''),
+        responsable: (inputResp && inputResp.value.trim()) ? inputResp.value : (appSettings.responsableDefault || 'Invitado'),
         updatedAt: firebase.database.ServerValue.TIMESTAMP
       });
       registerDevicePresence(); // cada envío de totales también renueva la señal de actividad
@@ -2403,10 +2584,20 @@ document.addEventListener('DOMContentLoaded', function(){
       // que el usuario siga escribiendo o marcando mientras tanto).
       lastPushedInvoicesJSON = JSON.stringify(state.invoices);
       lastPushedResumenJSON = JSON.stringify(resumenPayload);
-      fbDb.ref('facturas_data/' + currentSucursalId + '/invoices').set(state.invoices);
-      fbDb.ref('facturas_data/' + currentSucursalId + '/resumen').set(Object.assign({}, resumenPayload, {
-        updatedAt: firebase.database.ServerValue.TIMESTAMP
-      }));
+      // Se envían facturas y resumen JUNTOS, en una sola escritura
+      // multi-ruta (update en vez de dos .set() separados). Antes se
+      // mandaban como dos escrituras independientes, y las demás PC
+      // podían llegar a recibir una sin la otra por un instante (por
+      // ejemplo, la tabla ya vacía pero el resumen todavía con los
+      // valores viejos), causando que quedaran mostrando datos
+      // desincronizados. Así, siempre llegan atómicamente, las dos a la
+      // vez, en un solo evento.
+      fbDb.ref('facturas_data/' + currentSucursalId).update({
+        invoices: state.invoices,
+        resumen: Object.assign({}, resumenPayload, {
+          updatedAt: firebase.database.ServerValue.TIMESTAMP
+        })
+      });
     } catch (err){ /* silencioso */ }
   }
 
@@ -2463,10 +2654,19 @@ document.addEventListener('DOMContentLoaded', function(){
           state.invoices = ensureInsSeq(incomingInvoicesArr.slice());
           changedSomething = true;
         }
+        // Si la tabla se acaba de vaciar en otra PC (por "Eliminar
+        // seleccionadas", "Limpiar", "Eliminar Datos", etc.), el reseteo
+        // de Tarjetas/Coral/Responsable a su valor por defecto se aplica
+        // SIEMPRE, incluso si esta PC tiene el cursor puesto en alguno de
+        // esos campos — a diferencia de un cambio normal de valores (que
+        // sí respeta no interrumpir mientras se escribe), acá se trata de
+        // un vaciado explícito, no algo que valga la pena "proteger".
+        const tableJustEmptied = incomingInvoicesArr && incomingInvoicesArr.length === 0 && !isOwnInvoicesEcho;
         if (data.resumen && !isOwnResumenEcho){
           // No pisa un campo mientras el usuario lo tiene enfocado (lo está
-          // escribiendo justo en este momento).
-          const activeId = document.activeElement ? document.activeElement.id : null;
+          // escribiendo justo en este momento) — salvo que la tabla se
+          // haya vaciado, ver comentario arriba.
+          const activeId = tableJustEmptied ? null : (document.activeElement ? document.activeElement.id : null);
           const fieldsToUpdate = {};
           if (typeof data.resumen.tarjetas !== 'undefined' && activeId !== 'inputTarjetas') fieldsToUpdate.tarjetas = data.resumen.tarjetas;
           if (typeof data.resumen.coral !== 'undefined' && activeId !== 'inputCoral') fieldsToUpdate.coral = data.resumen.coral;
@@ -2522,18 +2722,26 @@ document.addEventListener('DOMContentLoaded', function(){
   // actualizan cuando alguien cambia una factura).
   function computeSucursalPresence(sucursalId, devicesData, nowMs){
     let anyOnline = false;
-    let anyRecent = false;
+    let anyAway = false;
     Object.keys(devicesData || {}).forEach(devId => {
       const d = devicesData[devId];
       if (!d || d.sucursalId !== sucursalId) return;
       const lastSeen = typeof d.lastSeen === 'number' ? d.lastSeen : null;
       if (!lastSeen) return;
+      // Si Firebase ya confirmó la desconexión (onDisconnect puso
+      // online:false apenas se cerró el navegador/se cortó la conexión),
+      // esa PC pasa a "desconectada" al instante — no cuenta como
+      // "ausente" solo porque el timestamp de esa desconexión sea
+      // reciente. Antes esto hacía que cerrar el navegador se viera como
+      // "Ausente" (amarillo) durante los primeros 10 minutos, en vez de
+      // "Desconectada" (gris) de una.
+      if (d.online === false) return;
       const age = nowMs - lastSeen;
-      if (d.online && age < BRANCH_ONLINE_AFTER_MS) anyOnline = true;
-      if (age < BRANCH_AWAY_AFTER_MS) anyRecent = true;
+      if (age < BRANCH_ONLINE_AFTER_MS) anyOnline = true;
+      else if (age < BRANCH_AWAY_AFTER_MS) anyAway = true;
     });
     if (anyOnline) return 'online';
-    if (anyRecent) return 'away';
+    if (anyAway) return 'away';
     return 'offline';
   }
 
@@ -2563,9 +2771,7 @@ document.addEventListener('DOMContentLoaded', function(){
     // del mismo estado de presencia de arriba, pero solo se resalta en
     // ámbar cuando hace falta llamar la atención (ausente); si está en
     // línea o desconectada se deja en el tono neutro de siempre.
-    const responsableRow = data.responsable
-      ? '<div class="branch-row branch-turno"><span class="lbl">Turno</span><span class="val">' + escapeHtml(firstNameOnly(data.responsable)) + '</span></div>'
-      : '';
+    const responsableRow = '<div class="branch-row branch-turno"><span class="lbl">Turno</span><span class="val">' + escapeHtml(firstNameOnly(data.responsable || 'Invitado')) + '</span></div>';
     return '<div class="branch-card' + (isSelf ? ' is-self' : '') + (isStale ? ' is-stale' : '') + '">' +
       '<div class="branch-name">' + escapeHtml(shortLabel) + (isSelf ? ' <span class="self-tag">' + escapeHtml(selfDeviceTag()) + '</span>' : '') + presenceBadge + '</div>' +
       '<div class="branch-row"><span class="lbl">Venta total</span><span class="val">' + formatCurrency(data.ventaTotal || 0) + '</span></div>' +
@@ -2996,8 +3202,9 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     if (container.querySelector('.devices-empty')) container.innerHTML = '';
 
-    // Más recientes primero. Varias PC pueden compartir la misma sucursal
-    // a la vez (ya no se considera un error).
+    // Orden solo para las tarjetas NUEVAS (más recientes primero). Varias
+    // PC pueden compartir la misma sucursal a la vez (ya no se considera
+    // un error).
     ids.sort((a, b) => (data[b].lastSeen || 0) - (data[a].lastSeen || 0));
 
     // Quita tarjetas de PC que ya no están en los datos.
@@ -3006,7 +3213,14 @@ document.addEventListener('DOMContentLoaded', function(){
       if (ids.indexOf(cid) === -1) card.remove();
     });
 
-    // Crea las tarjetas nuevas y actualiza las que ya existían.
+    // Crea las tarjetas nuevas (se agregan al final, según el orden de
+    // arriba) y actualiza EN EL LUGAR las que ya existían — a propósito,
+    // ya NO se reordenan las tarjetas existentes en cada actualización en
+    // tiempo real (antes "saltaban" de posición cada vez que cualquier PC
+    // mandaba su señal de actividad, cada ~25 segundos). Así, la posición
+    // de cada PC queda fija mientras se sigue viendo la lista; solo se
+    // mueve si la tarjeta se vuelve a crear (por ejemplo, tras cerrar y
+    // volver a abrir "Actividad y permisos").
     ids.forEach(id => {
       const selector = '.device-card[data-device-id="' + id.replace(/"/g, '') + '"]';
       let card = container.querySelector(selector);
@@ -3018,12 +3232,6 @@ document.addEventListener('DOMContentLoaded', function(){
       } else {
         updateDeviceCardInPlace(card, id, data[id], nowMs);
       }
-    });
-
-    // Reordena (más recientes primero) sin recrear ninguna tarjeta.
-    ids.forEach(id => {
-      const card = container.querySelector('.device-card[data-device-id="' + id.replace(/"/g, '') + '"]');
-      if (card) container.appendChild(card);
     });
 
     applyDevicesFilter();
@@ -3141,7 +3349,7 @@ document.addEventListener('DOMContentLoaded', function(){
       const confirmMsg = currentlyBlocked
         ? '¿Desbloquear esta PC? Va a poder volver a entrar y usar el sistema con normalidad.'
         : '¿Bloquear esta PC? Va a dejar de poder usar el sistema por completo (se le muestra una pantalla de bloqueo) y no se enviarán ni recibirán datos de la nube hasta que la desbloquee.';
-      const ok = await showConfirmDialog(confirmMsg);
+      const ok = await showConfirmDialog(confirmMsg, 'device_toggle_block');
       if (!ok) return;
       fbDb.ref('dispositivos/' + targetDeviceId + '/blocked').set(!currentlyBlocked)
         .then(() => {
@@ -3210,12 +3418,32 @@ document.addEventListener('DOMContentLoaded', function(){
 
     if (e.target.classList.contains('device-btn-reset-first-run')){
       const isSelf = targetDeviceId === deviceId;
+      const isBlocked = card.classList.contains('is-blocked');
       const confirmMsg = '¿Restablecer esta PC como si fuera un dispositivo nuevo? La próxima vez que muestre la bienvenida, va a volver a ofrecer las 3 sucursales (en vez de solo la que ya tenía). ' +
         (isSelf ? 'Como es esta misma PC, se aplica de inmediato.' : 'Se aplica apenas esa PC esté conectada.');
       const ok = await showConfirmDialog(confirmMsg);
       if (!ok) return;
-      fbDb.ref('dispositivos/' + targetDeviceId + '/resetToFirstRun').set(true)
-        .then(() => toast('Restablecimiento enviado', 'ok'))
+      // Si esa PC está bloqueada en este momento, no puede aplicar el
+      // restablecimiento todavía (recién lo hace cuando la desbloqueen,
+      // ver el bloque de "resetToFirstRun" en listenToOwnDevice). Pero
+      // igual conviene soltar su sucursal en la nube DE INMEDIATO — igual
+      // que hace "Desconectar" — para que el panel de "Actividad y
+      // permisos" la muestre al instante como "sin sucursal aún", en vez
+      // de quedar pegada mostrando la sucursal vieja hasta que alguien la
+      // desbloquee.
+      const updates = { resetToFirstRun: true };
+      if (isBlocked){
+        updates.sucursalId = null;
+        updates.sucursalLabel = null;
+      }
+      fbDb.ref('dispositivos/' + targetDeviceId).update(updates)
+        .then(() => {
+          toast('Restablecimiento enviado', 'ok');
+          if (isBlocked){
+            updateDeviceCardInPlace(card, targetDeviceId, { blocked: true, sucursalId: null, sucursalLabel: null, online: false, lastSeen: Date.now() }, Date.now());
+            applyDevicesFilter();
+          }
+        })
         .catch(() => toast('No se pudo enviar el restablecimiento. Revise la conexión.', 'err'));
     }
   });
@@ -3267,10 +3495,9 @@ document.addEventListener('DOMContentLoaded', function(){
     };
     try { localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify(appSettings.cloud)); } catch (e){ /* silencioso */ }
     if (cloudEnabled){
-      const connected = connectFirebase();
+      const connected = connectFirebase(startDevicesListListener);
       if (connected){
         renderSummary(); // fuerza el primer envío de totales
-        startDevicesListListener();
       }
     } else {
       disconnectFirebase();
@@ -3281,6 +3508,13 @@ document.addEventListener('DOMContentLoaded', function(){
     }
 
     toast('Configuración de administrador guardada', 'ok');
+  });
+
+  document.getElementById('btnResetConfirmSkips').addEventListener('click', () => {
+    const count = resetAllConfirmSkips();
+    toast(count > 0
+      ? ('Listo: ' + count + ' mensaje(s) de confirmación van a volver a preguntar.')
+      : 'No había ningún mensaje de confirmación silenciado.', 'ok');
   });
 
   document.getElementById('btnResetAdminPanel').addEventListener('click', async () => {
@@ -3317,8 +3551,7 @@ document.addEventListener('DOMContentLoaded', function(){
     closeAdminPanelModal();
 
     if (appSettings.cloud.enabled){
-      const connected = connectFirebase();
-      if (connected) startDevicesListListener();
+      connectFirebase(startDevicesListListener);
     } else {
       disconnectFirebase();
     }
@@ -3869,7 +4102,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
     if (pageItems.length === 0){
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="11" class="muted" style="text-align:center;padding:1.2rem;">Sin resultados. Cargue imágenes o pegue texto para comenzar.</td>';
+      tr.innerHTML = '<td colspan="12" class="muted" style="text-align:center;padding:1.2rem;">Sin resultados. Pegue texto o use el escáner móvil para comenzar.</td>';
       tbody.appendChild(tr);
     }
 
@@ -3892,6 +4125,7 @@ document.addEventListener('DOMContentLoaded', function(){
         '<td contenteditable="true" data-field="cliente">' + escapeHtml(inv.cliente) + '</td>' +
         '<td>' + escapeHtml(inv.origen) + '</td>' +
         '<td class="estado-cell">' + escapeHtml(inv.estado) + (inv.dudoso ? ' <span class="badge badge-dudoso">Revisar</span>' : '') + '</td>' +
+        '<td>' + (inv.detalleEscaneo ? '<button type="button" class="row-view-btn" aria-label="Ver detalle de factura ' + inv.num + '" title="Ver detalle">👁 Ver</button>' : '<span class="muted">—</span>') + '</td>' +
         '<td><button type="button" class="row-del-btn" aria-label="Eliminar fila ' + inv.num + '" title="Eliminar fila">✕</button></td>';
 
       tbody.appendChild(tr);
@@ -3995,8 +4229,15 @@ document.addEventListener('DOMContentLoaded', function(){
     }
   });
 
-  // Eliminar fila individual
+  // Ver detalle / eliminar fila individual
   document.getElementById('invoiceTableBody').addEventListener('click', function(e){
+    const viewBtn = e.target.closest('.row-view-btn');
+    if (viewBtn){
+      const tr = viewBtn.closest('tr');
+      const inv = state.invoices.find(i => i.id === tr.dataset.id);
+      if (inv) showInvoiceDetail(inv);
+      return;
+    }
     if (e.target.classList.contains('row-del-btn')){
       const tr = e.target.closest('tr');
       state.invoices = state.invoices.filter(i => i.id !== tr.dataset.id);
@@ -4049,6 +4290,15 @@ document.addEventListener('DOMContentLoaded', function(){
     const count = state.invoices.filter(i => i.selected).length;
     if (!count){ toast('No hay filas seleccionadas', 'warn'); return; }
     state.invoices = state.invoices.filter(i => !i.selected);
+    // Si la tabla queda completamente vacía, Tarjetas/Coral/Responsable
+    // vuelven a su valor por defecto — mismo criterio que "Eliminar
+    // Datos" y "Limpiar", para no dejar un monto suelto sin ninguna
+    // factura detrás que lo respalde.
+    if (!state.invoices.length){
+      document.getElementById('inputTarjetas').value = '0';
+      document.getElementById('inputCoral').value = '0';
+      document.getElementById('inputResponsable').value = appSettings.responsableDefault || '';
+    }
     recalcAll();
     toast(count + ' fila(s) eliminada(s)', 'ok');
   });
@@ -4077,6 +4327,345 @@ document.addEventListener('DOMContentLoaded', function(){
     recalcAll();
     toast('Factura manual agregada. Complete los datos en la tabla.', 'ok');
   });
+
+
+  /* ------------------------------------------------------------------
+     ESCÁNER MÓVIL RESS — cámara continua + OCR
+     ------------------------------------------------------------------ */
+  let scannerStream = null;
+  let scannerWorker = null;
+  let scannerTimer = null;
+  let scannerBusy = false;
+  let scannerActive = false;
+  let scannerTorchOn = false;
+  let scannerLastInvoiceId = null;
+  let scannerLastRef = '';
+  let scannerScanCount = 0;
+  const SCANNER_INTERVAL_MS = 2200;
+
+  function isMobileScannerDevice(){
+    return window.matchMedia('(max-width: 900px)').matches;
+  }
+
+  function cameraApiAvailable(){
+    return !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+  }
+
+  function cameraErrorMessage(err){
+    const name = err && err.name ? err.name : '';
+    if (!window.isSecureContext){
+      return 'La cámara necesita HTTPS. Abra la aplicación desde su enlace de Vercel, no desde el archivo HTML descargado.';
+    }
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError'){
+      return 'El navegador bloqueó el permiso de cámara. Active Cámara para este sitio en los permisos del navegador y vuelva a intentar.';
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError'){
+      return 'No se encontró una cámara disponible en este dispositivo.';
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError'){
+      return 'La cámara está siendo usada por otra aplicación. Cierre otras apps que estén usando la cámara y vuelva a intentar.';
+    }
+    if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError'){
+      return 'La cámara no acepta la configuración solicitada. Se intentará con una configuración compatible.';
+    }
+    return 'No se pudo abrir la cámara. Revise los permisos del navegador y vuelva a intentar.';
+  }
+
+  function setScannerStatus(main, sub, kind){
+    const status = document.getElementById('scannerStatus');
+    const substatus = document.getElementById('scannerSubstatus');
+    const pulse = document.getElementById('scannerPulse');
+    if (status) status.textContent = main || '';
+    if (substatus && sub != null) substatus.textContent = sub;
+    if (pulse) pulse.className = 'scanner-pulse' + (kind ? ' ' + kind : '');
+  }
+
+  function scannerBeep(ok){
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx){
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = ok ? 880 : 260;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (ok ? 0.13 : 0.22));
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + (ok ? 0.14 : 0.23));
+        setTimeout(() => ctx.close().catch(()=>{}), 350);
+      }
+    } catch(e){ /* silencioso */ }
+    if (navigator.vibrate) navigator.vibrate(ok ? 90 : [60,50,60]);
+  }
+
+  function normalizeReceiptText(text){
+    return String(text || '').replace(/[‐‑–—]/g, '-').replace(/\u00a0/g, ' ').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
+  }
+
+  function normalizeReceiptDate(raw){
+    if (!raw) return '';
+    const v = raw.replace(/\./g,'/').trim();
+    let m = v.match(/^(\d{4})[-\/]([01]?\d)[-\/]([0-3]?\d)$/);
+    if (m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+    m = v.match(/^([0-3]?\d)[\/]([01]?\d)[\/](\d{4})$/);
+    if (m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+    return '';
+  }
+
+  function receiptMoney(v){
+    if (v == null) return null;
+    const n = parseFloat(String(v).replace(/[^0-9,.-]/g,'').replace(',','.'));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function extractReceiptProducts(text){
+    const lines = normalizeReceiptText(text).split('\n').map(x=>x.trim()).filter(Boolean);
+    const products = [];
+    let inProducts = false;
+    for (const line0 of lines){
+      const line = line0.replace(/\s{2,}/g,' ').trim();
+      const up = line.toUpperCase();
+      if (/DESCRIPCION|DESCRIPCIÓN/.test(up) && /PREC|TOT|CANT|#/.test(up)){ inProducts = true; continue; }
+      if (/SUBTOTAL|IVA|VALOR\s*A\s*PAGAR/.test(up)){ if (inProducts) break; continue; }
+      if (!inProducts && !/^[A-Z0-9]{4,14}\b/.test(up)) continue;
+      const codeM = line.match(/^([A-Z0-9]{4,14})\s+(.+)$/i);
+      if (!codeM) continue;
+      const codigo = codeM[1].toUpperCase();
+      if (/^(RUC|FACTURA|CLIENTE|FECHA|USUARIO|AMBIENTE|EMISION)$/i.test(codigo)) continue;
+      const rest = codeM[2].trim();
+      const nums = [...rest.matchAll(/(?:^|\s)(\d+(?:[.,]\d{1,2})?)(?=\s|$)/g)].map(m=>({v:m[1],i:m.index||0}));
+      if (nums.length < 2) continue;
+      const total = receiptMoney(nums[nums.length-1].v);
+      const precio = nums.length >= 2 ? receiptMoney(nums[nums.length-2].v) : null;
+      let cantidad = 1, qtyIndex = -1;
+      for (let i=0;i<nums.length-1;i++){
+        const n = Number(nums[i].v.replace(',','.'));
+        if (Number.isInteger(n) && n > 0 && n <= 999){ cantidad=n; qtyIndex=nums[i].i; break; }
+      }
+      const cutAt = qtyIndex >= 0 ? qtyIndex : nums[Math.max(0,nums.length-2)].i;
+      let descripcion = rest.slice(0, cutAt).replace(/\s+/g,' ').trim();
+      if (!descripcion) descripcion = rest.replace(/\s+\d+(?:[.,]\d+)?(?:\s+\d+(?:[.,]\d+)?)+\s*$/,'').trim();
+      if (!descripcion || total == null) continue;
+      products.push({ codigo, descripcion, cantidad, precio, total });
+    }
+    return products;
+  }
+
+  function parseRessReceipt(text){
+    const raw = normalizeReceiptText(text);
+    if (!raw) return null;
+    const flat = raw.replace(/\n+/g,' ').replace(/\s+/g,' ');
+    const up = flat.toUpperCase();
+    if (!/RESS|CAFETER[IÍ]A|FACTURA/.test(up)) return null;
+    let ref = '';
+    const refPatterns = [
+      /FACTURA\s*(?:N[Oº°.]*)?\s*[:#-]?\s*([0-9OoIl]{3})[-\s]([0-9OoIl]{3})[-\s]([0-9OoIl]{8,10})/i,
+      /\b([0-9OoIl]{3})[-\s]([0-9OoIl]{3})[-\s]([0-9OoIl]{8,10})\b/i
+    ];
+    for (const re of refPatterns){ const m=flat.match(re); if(m){ ref=[m[1],m[2],m[3]].map(fixOcrDigits).join('-'); break; } }
+    const caM = flat.match(/(?:\bCA\b|CLAVE\s+DE\s+ACCESO)\s*[:.-]?\s*([0-9\s]{45,60})/i);
+    const claveAcceso = caM ? caM[1].replace(/\D/g,'').slice(0,49) : '';
+    let fecha='', hora='';
+    let dm = flat.match(/(?:FECHA(?:\s+Y\s+HORA)?(?:\s+DE\s+EMISI[ÓO]N)?\s*[:.-]?\s*)?(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})\s+(\d{1,2}:\d{2})/i);
+    if (!dm) dm = flat.match(/(?:FECHA(?:\s+Y\s+HORA)?(?:\s+DE\s+EMISI[ÓO]N)?\s*[:.-]?\s*)?(\d{1,2}[\/.]\d{1,2}[\/.]\d{4})\s+(\d{1,2}:\d{2})/i);
+    if (dm){ fecha=normalizeReceiptDate(dm[1]); hora=dm[2]; }
+    if (!fecha){ const d2=flat.match(/\b(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}[\/.]\d{1,2}[\/.]\d{4})\b/); if(d2) fecha=normalizeReceiptDate(d2[1]); }
+    let cliente='';
+    if (/CONSUMIDOR\s+FINAL/i.test(flat)) cliente='CONSUMIDOR FINAL';
+    else { const cm=flat.match(/CLIENTE\s*[:.-]?\s*([A-ZÁÉÍÓÚÑÜ ]{4,60}?)(?=\s+(?:RUC|CI|C[ÉE]DULA|USUARIO|FECHA|COD|DESCRIP))/i); if(cm) cliente=cleanClienteName(cm[1]); }
+    let valor=null; const vm=flat.match(/VALOR\s*A\s*PAGAR\s*[:.$-]*\s*\$?\s*([0-9]+[.,][0-9]{2})/i); if(vm) valor=receiptMoney(vm[1]);
+    let metodoPago='';
+    if (/TARJETA\s+DE\s+DEBITO|TARJETA\s+DE\s+D[ÉE]BITO/i.test(flat)) metodoPago='TARJETA DE DÉBITO';
+    else if (/TARJETA\s+DE\s+CREDITO|TARJETA\s+DE\s+CR[ÉE]DITO/i.test(flat)) metodoPago='TARJETA DE CRÉDITO';
+    else if (/CR[ÉE]DITO\s+CORAL|CREDITO\s+CORAL|CORAL\s+CREDITO/i.test(flat)) metodoPago='CRÉDITO CORAL';
+    else if (/\bEFECTIVO\b/i.test(flat)) metodoPago='EFECTIVO';
+    const subM=flat.match(/SUBTOTAL(?:\s*15\s*%)?\s*[:.$-]*\s*\$?\s*([0-9]+[.,][0-9]{2})/i);
+    const ivaM=flat.match(/IVA(?:\s*15\s*%)?\s*[:.$-]*\s*\$?\s*([0-9]+[.,][0-9]{2})/i);
+    const subtotal=subM?receiptMoney(subM[1]):null, iva=ivaM?receiptMoney(ivaM[1]):null;
+    const products=extractReceiptProducts(raw);
+    if (!ref || valor == null) return null;
+    return {referencia:cleanReference(ref),fecha:fecha||new Date().toISOString().slice(0,10),hora,centro:cleanReference(ref).split('-')[0]||'',cliente:cliente||'CONSUMIDOR FINAL',valor,metodoPago,claveAcceso,subtotal,iva,productos:products,rawText:raw};
+  }
+
+  function showInvoiceDetail(inv){
+    const d = inv && inv.detalleEscaneo;
+    if (!d){ toast('Esta fila no tiene detalle de escaneo.', 'warn'); return; }
+    const body = document.getElementById('invoiceDetailBody');
+    const products = Array.isArray(d.productos) ? d.productos : [];
+    const money = n => (typeof n === 'number' && Number.isFinite(n)) ? '$' + n.toFixed(2) : '—';
+    const prodHtml = products.length ? '<table class="detail-products"><thead><tr><th>Código</th><th>Descripción</th><th>Cant.</th><th>Precio</th><th>Total</th></tr></thead><tbody>' + products.map(p => '<tr><td>'+escapeHtml(p.codigo||'')+'</td><td>'+escapeHtml(p.descripcion||'')+'</td><td class="num">'+escapeHtml(String(p.cantidad||1))+'</td><td class="num">'+money(p.precio)+'</td><td class="num">'+money(p.total)+'</td></tr>').join('') + '</tbody></table>' : '<p class="muted">El OCR no separó productos individuales en este escaneo. Puede revisar el texto reconocido al final.</p>';
+    body.innerHTML = '<div class="detail-grid"><div class="detail-item"><span class="k">Factura</span><span class="v">'+escapeHtml(inv.referencia||'')+'</span></div><div class="detail-item"><span class="k">Fecha y hora</span><span class="v">'+escapeHtml(toDisplayDate(inv.fecha)+(d.hora?' '+d.hora:''))+'</span></div><div class="detail-item"><span class="k">Cliente</span><span class="v">'+escapeHtml(inv.cliente||'')+'</span></div><div class="detail-item"><span class="k">Forma de pago</span><span class="v">'+escapeHtml(d.metodoPago||'No reconocida')+'</span></div>'+(d.claveAcceso?'<div class="detail-item" style="grid-column:1/-1"><span class="k">Clave de acceso</span><span class="v cell-ref">'+escapeHtml(d.claveAcceso)+'</span></div>':'')+'</div><h3>Productos</h3>'+prodHtml+'<div class="detail-grid" style="margin-top:.8rem"><div class="detail-item"><span class="k">Subtotal</span><span class="v">'+money(d.subtotal)+'</span></div><div class="detail-item"><span class="k">IVA</span><span class="v">'+money(d.iva)+'</span></div></div><div class="detail-total"><span>VALOR A PAGAR</span><span>'+money(inv.valor)+'</span></div><details class="detail-raw"><summary>Ver texto completo reconocido por el escáner</summary><pre>'+escapeHtml(d.rawText||'')+'</pre></details>';
+    document.getElementById('invoiceDetailModal').hidden=false;
+  }
+
+  function addScannedReceipt(d){
+    const existing=state.invoices.find(i => i.referencia === d.referencia);
+    if (existing){ scannerLastInvoiceId=existing.id; scannerLastRef=d.referencia; setScannerStatus('Factura ya registrada',d.referencia+' no se agregó nuevamente.','err'); scannerBeep(false); return; }
+    const inv={id:uid(),num:0,insSeq:nextInsSeq(),fecha:d.fecha,centro:d.centro,referencia:d.referencia,transaccion:'FACTURA',valor:d.valor,cliente:d.cliente||'CONSUMIDOR FINAL',origen:'escáner móvil',estado:'Pendiente',dudoso:false,duplicada:false,esOriginal:false,incluirEnTotal:true,selected:true,errores:[],detalleEscaneo:{hora:d.hora||'',metodoPago:d.metodoPago||'',claveAcceso:d.claveAcceso||'',subtotal:d.subtotal,iva:d.iva,productos:d.productos||[],rawText:d.rawText||''}};
+    state.invoices.push(inv); state.sortKey='num'; state.sortDir='desc'; state.currentPage=1;
+    scannerScanCount++; document.getElementById('scannerCount').textContent=String(scannerScanCount); scannerLastInvoiceId=inv.id; scannerLastRef=d.referencia;
+    document.getElementById('scannerLastRef').textContent='✓ '+d.referencia;
+    document.getElementById('scannerLastInfo').textContent=(d.productos.length?d.productos.length+' producto(s) · ':'')+(d.metodoPago||'Pago no reconocido')+' · $'+d.valor.toFixed(2);
+    document.getElementById('scannerLast').hidden=false;
+    recalcAll(); try{persistInvoicesToStorage(null);}catch(e){} try{scheduleCloudSync(computeSummaryTotals());}catch(e){}
+    scannerBeep(true); setScannerStatus('Factura agregada',d.referencia+' · $'+d.valor.toFixed(2),'ok');
+  }
+
+  function captureScannerFrame(){
+    const video=document.getElementById('scannerVideo'), canvas=document.getElementById('scannerCanvas');
+    if (!video.videoWidth || !video.videoHeight) return null;
+    const vw=video.videoWidth,vh=video.videoHeight,cropW=Math.round(vw*0.72),cropH=Math.round(vh*0.88),sx=Math.max(0,Math.round((vw-cropW)/2)),sy=Math.max(0,Math.round((vh-cropH)/2));
+    canvas.width=Math.min(1500,cropW); canvas.height=Math.round(canvas.width*(cropH/cropW));
+    const ctx=canvas.getContext('2d',{willReadFrequently:true}); ctx.drawImage(video,sx,sy,cropW,cropH,0,0,canvas.width,canvas.height);
+    const im=ctx.getImageData(0,0,canvas.width,canvas.height),a=im.data; for(let i=0;i<a.length;i+=4){const g=.299*a[i]+.587*a[i+1]+.114*a[i+2],v=Math.max(0,Math.min(255,(g-128)*1.35+128));a[i]=a[i+1]=a[i+2]=v;} ctx.putImageData(im,0,0); return canvas;
+  }
+
+  async function scannerTick(){
+    if (!scannerActive || scannerBusy) return; scannerBusy=true;
+    try{
+      const canvas=captureScannerFrame(); if(!canvas) return;
+      setScannerStatus('Leyendo factura…','Mantenga la factura quieta dentro del marco.','');
+      if(!scannerWorker){ if(typeof Tesseract==='undefined') throw new Error('Tesseract no disponible'); setScannerStatus('Cargando reconocimiento…','La primera lectura puede tardar unos segundos.',''); scannerWorker=await Tesseract.createWorker('spa+eng',1); await scannerWorker.setParameters({tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'}); }
+      const result=await scannerWorker.recognize(canvas); const d=parseRessReceipt(result.data&&result.data.text?result.data.text:'');
+      if(!d){ setScannerStatus('Buscando factura…','Acerque el recibo y evite reflejos o movimiento.',''); return; }
+      if(d.referencia===scannerLastRef){ setScannerStatus('Factura ya leída','Retire esta factura y coloque la siguiente.','ok'); return; }
+      addScannedReceipt(d);
+    }catch(err){ setScannerStatus('No se pudo leer','Revise el permiso de cámara y la conexión para cargar OCR.','err'); }
+    finally{ scannerBusy=false; }
+  }
+
+  async function startMobileScanner(){
+    if(!isMobileScannerDevice()){
+      toast('El escáner continuo está disponible en modo móvil.', 'warn');
+      return;
+    }
+
+    const modal = document.getElementById('scannerModal');
+    const video = document.getElementById('scannerVideo');
+    modal.hidden = false;
+    scannerScanCount = 0;
+    document.getElementById('scannerCount').textContent = '0';
+    document.getElementById('scannerLast').hidden = true;
+
+    if (!window.isSecureContext){
+      setScannerStatus(
+        'Se requiere HTTPS',
+        'Abra esta aplicación desde su enlace https:// de Vercel. La cámara no funciona al abrir el archivo HTML directamente desde Descargas.',
+        'err'
+      );
+      return;
+    }
+
+    if (!cameraApiAvailable()){
+      setScannerStatus(
+        'Cámara no compatible',
+        'Este navegador no permite acceso continuo a la cámara. Pruebe con Chrome o Edge actualizado en Android.',
+        'err'
+      );
+      return;
+    }
+
+    // Cierra cualquier flujo anterior antes de pedir uno nuevo.
+    if (scannerStream){
+      scannerStream.getTracks().forEach(t => t.stop());
+      scannerStream = null;
+    }
+
+    setScannerStatus('Solicitando cámara…', 'Pulse Permitir cuando el navegador solicite acceso.', '');
+
+    try{
+      let stream = null;
+
+      // Primer intento: preferir cámara trasera.
+      try{
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio:false,
+          video:{
+            facingMode:{ ideal:'environment' },
+            width:{ ideal:1280 },
+            height:{ ideal:720 }
+          }
+        });
+      }catch(firstErr){
+        // Segundo intento: configuración mínima para equipos/navegadores
+        // que rechazan facingMode o resoluciones solicitadas.
+        if (firstErr && (firstErr.name === 'OverconstrainedError' ||
+                         firstErr.name === 'ConstraintNotSatisfiedError')){
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio:false,
+            video:true
+          });
+        }else{
+          throw firstErr;
+        }
+      }
+
+      scannerStream = stream;
+      video.srcObject = scannerStream;
+
+      // Espera a que existan dimensiones reales del video.
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        const fail = () => {
+          if (settled) return;
+          settled = true;
+          reject(new Error('No fue posible iniciar la vista previa de la cámara.'));
+        };
+        if (video.readyState >= 2 && video.videoWidth) return done();
+        video.onloadedmetadata = done;
+        video.oncanplay = done;
+        setTimeout(() => {
+          if (video.videoWidth) done();
+          else fail();
+        }, 5000);
+      });
+
+      try{
+        await video.play();
+      }catch(playErr){
+        // En algunos móviles autoplay puede fallar aunque el stream sí exista.
+        // Como el inicio proviene de un toque del usuario, reintentamos una vez.
+        video.muted = true;
+        await video.play();
+      }
+
+      scannerActive = true;
+      scannerLastRef = '';
+      setScannerStatus('Buscando factura…', 'Coloque una factura RESS dentro del marco y manténgala quieta.', '');
+      if (scannerTimer) clearInterval(scannerTimer);
+      scannerTimer = setInterval(scannerTick, SCANNER_INTERVAL_MS);
+      setTimeout(scannerTick, 350);
+
+    }catch(err){
+      scannerActive = false;
+      if (scannerStream){
+        scannerStream.getTracks().forEach(t => t.stop());
+        scannerStream = null;
+      }
+      video.srcObject = null;
+      console.error('Error al iniciar cámara:', err);
+      setScannerStatus('Cámara no disponible', cameraErrorMessage(err), 'err');
+    }
+  }
+
+  async function stopMobileScanner(closeModal){
+    scannerActive=false; if(scannerTimer){clearInterval(scannerTimer);scannerTimer=null;} if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null;} const video=document.getElementById('scannerVideo'); if(video)video.srcObject=null; scannerTorchOn=false; document.getElementById('btnScannerTorch').textContent='🔦 Linterna'; if(closeModal)document.getElementById('scannerModal').hidden=true; setScannerStatus('Escáner detenido','Puede volver a iniciarlo desde 📷 Escanear.','err');
+  }
+
+  document.getElementById('btnOpenScanner').addEventListener('click',startMobileScanner);
+  document.getElementById('btnScannerRetry').addEventListener('click',startMobileScanner);
+  document.getElementById('scannerModalClose').addEventListener('click',()=>stopMobileScanner(true));
+  document.getElementById('btnScannerStop').addEventListener('click',()=>stopMobileScanner(false));
+  document.getElementById('btnScannerViewLast').addEventListener('click',()=>{const inv=state.invoices.find(i=>i.id===scannerLastInvoiceId);if(inv)showInvoiceDetail(inv);});
+  document.getElementById('invoiceDetailModalClose').addEventListener('click',()=>{document.getElementById('invoiceDetailModal').hidden=true;});
+  document.getElementById('btnScannerTorch').addEventListener('click',async()=>{try{if(!scannerStream)return;const track=scannerStream.getVideoTracks()[0],caps=track.getCapabilities?track.getCapabilities():{};if(!caps.torch){toast('La linterna no está disponible en este dispositivo.','warn');return;}scannerTorchOn=!scannerTorchOn;await track.applyConstraints({advanced:[{torch:scannerTorchOn}]});document.getElementById('btnScannerTorch').textContent=scannerTorchOn?'🔦 Apagar':'🔦 Linterna';}catch(e){toast('No se pudo cambiar la linterna.','warn');}});
+  window.addEventListener('pagehide',()=>{if(scannerActive)stopMobileScanner(false);});
 
   /* ------------------------------------------------------------------
      SECCIÓN 2: TEXTO — PARSEO DE FACTURAS
@@ -5362,8 +5951,11 @@ document.addEventListener('DOMContentLoaded', function(){
     const tarjetasExport = parseFloat(document.getElementById('inputTarjetas').value) || 0;
     const coralExport = parseFloat(document.getElementById('inputCoral').value) || 0;
     const responsableExport = document.getElementById('inputResponsable').value.trim();
-    const dataEndRow = state.invoices.length + 1;
-    const facturasValRange = 'Facturas!F2:F' + dataEndRow; // columna Valor
+    // Total de venta (mismo cálculo que usaría la fórmula SUM sobre la hoja
+    // Facturas), calculado acá como número para poder dejar "Efectivo" como
+    // un valor fijo editable en vez de una fórmula — ver nota más abajo.
+    const ventaTotalExport = exportInvoices.reduce((s, inv) => s + (typeof inv.valor === 'number' ? inv.valor : 0), 0);
+    const efectivoExport = ventaTotalExport - tarjetasExport - coralExport;
     const currencyFmt = '"$"#,##0.00_);[Red]\\("$"#,##0.00\\)';
     const fechaFmt = '[$-C0A]d\\ "de"\\ mmmm\\ "de"\\ yyyy;@';
     const NCOLS = 12; // columnas A..L, igual que la plantilla de referencia
@@ -5449,15 +6041,25 @@ document.addEventListener('DOMContentLoaded', function(){
       styleRange(r1,0,r2,NCOLS-1, { font:{ name:'Calibri', sz:18 }, alignment:{ horizontal:'center', vertical:'center' }, border: allBorders });
       ws2[addr(r1,0)] = { t:'n', v: val, z: currencyFmt, s: ws2[addr(r1,0)].s };
     });
-    // Efectivo (fila 4) = Venta Total (H18) - Tarjetas (A10) - Coral (A15)
+    // Efectivo (fila 4): ahora es un NÚMERO FIJO (ya no una fórmula que
+    // dependiera del total de más abajo). Antes decía "=H18-A10-A15", y
+    // como el total (H18) se calculaba a su vez sumando estas mismas
+    // celdas, cualquiera que tocara el total a mano en Excel se encontraba
+    // con una referencia circular (#¡VALOR!). Al dejar el efectivo como
+    // valor fijo, las tres celdas (efectivo, tarjeta, coral) quedan
+    // libres para editarse a mano sin romper nada.
     styleRange(4,0,7,NCOLS-1, { font:{ name:'Calibri', sz:18 }, alignment:{ horizontal:'center', vertical:'center' }, border: allBorders });
-    ws2[addr(4,0)] = { t:'n', f: addr(17,7) + '-' + addr(9,0) + '-' + addr(14,0), z: currencyFmt, s: ws2[addr(4,0)].s };
+    ws2[addr(4,0)] = { t:'n', v: efectivoExport, z: currencyFmt, s: ws2[addr(4,0)].s };
 
     // Fila de TOTAL DE VENTA POR DÍA: etiqueta a la izquierda, valor
     // resaltado con fondo gris a la derecha (igual que la plantilla).
     styleRange(17,0,17,6, { font:{ name:'Calibri', bold:true, sz:11 }, alignment:{ horizontal:'center', vertical:'center', wrapText:true }, border: allBorders });
     styleRange(17,7,17,NCOLS-1, { font:{ name:'Calibri', bold:true, sz:22 }, alignment:{ horizontal:'center', vertical:'center', wrapText:true }, fill:{ fgColor:{ rgb:'D9D9D9' } }, border: allBorders });
-    ws2[addr(17,7)] = { t:'n', f: 'SUM(' + facturasValRange + ')', z: currencyFmt, s: ws2[addr(17,7)].s };
+    // Total = Efectivo (A5) + Tarjeta (A10) + Coral (A15). Al ser la suma
+    // de las tres celdas editables (y no al revés), se puede modificar
+    // cualquiera de las tres a mano en Excel y el total se recalcula solo,
+    // sin generar ningún círculo.
+    ws2[addr(17,7)] = { t:'n', f: addr(4,0) + '+' + addr(9,0) + '+' + addr(14,0), z: currencyFmt, s: ws2[addr(17,7)].s };
 
     // Responsable de turno: nombre (línea de firma, tipografía tipo manuscrita)
     // + leyenda debajo, igual que la plantilla. El borde inferior se aplica
